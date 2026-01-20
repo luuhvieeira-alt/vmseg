@@ -1,17 +1,10 @@
+
 import React, { useState } from 'react';
 import { gemini } from '../services/gemini';
 
 interface AiAssistantProps {
   lead: { cliente: string; veiculo: string; info: string };
   onClose: () => void;
-}
-
-// Fix: The global Window interface already has aistudio defined as AIStudio in this environment.
-// We align our declaration to match the expected type to resolve the 'identical modifiers' and 'same type' errors.
-declare global {
-  interface Window {
-    aistudio: AIStudio;
-  }
 }
 
 const AiAssistant: React.FC<AiAssistantProps> = ({ lead, onClose }) => {
@@ -41,8 +34,8 @@ const AiAssistant: React.FC<AiAssistantProps> = ({ lead, onClose }) => {
 
   const handleSetupKey = async () => {
     try {
-      // Trigger the selection dialog to let the user select a paid project API key
-      await window.aistudio.openSelectKey();
+      // Fix: Trigger the selection dialog using casting to any for window.aistudio to bypass identical modifiers conflict in global Window interface
+      await (window as any).aistudio.openSelectKey();
       // Per instructions, assume the key selection was successful and proceed
       handleGenerate();
     } catch (e) {

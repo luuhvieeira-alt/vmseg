@@ -30,6 +30,9 @@ const App: React.FC = () => {
   const [editingItem, setEditingItem] = useState<any>(null);
   const [aiLead, setAiLead] = useState<any>(null);
 
+  // Drag and Drop State
+  const [draggedItem, setDraggedItem] = useState<{ id: string, type: 'venda' | 'indicacao' } | null>(null);
+
   useEffect(() => {
     const unsubVendas = cloud.subscribeVendas(setVendas);
     const unsubUsers = cloud.subscribeUsuarios(setUsuarios);
@@ -87,6 +90,33 @@ const App: React.FC = () => {
     }
     return list;
   }, [indicacoes, user, searchTerm]);
+
+  // --- Drag and Drop Handlers ---
+  const handleDragStart = (e: React.DragEvent, id: string, type: 'venda' | 'indicacao') => {
+    setDraggedItem({ id, type });
+    e.dataTransfer.setData('text/plain', id);
+    e.dataTransfer.effectAllowed = 'move';
+  };
+
+  const handleDrop = async (e: React.DragEvent, newStatus: string, type: 'venda' | 'indicacao') => {
+    e.preventDefault();
+    if (!draggedItem || draggedItem.type !== type) return;
+    
+    // Fix: Adjusted comparison to correct type value 'venda' to resolve TypeScript mismatch
+    const collection = type === 'venda' ? 'vendas' : 'indicacoes';
+    try {
+      // Fix: Used the computed 'collection' variable to ensure consistency and fix the type error
+      await cloud.updateStatus(collection, draggedItem.id, newStatus);
+    } catch (err) {
+      console.error("Erro ao mover item:", err);
+    }
+    setDraggedItem(null);
+  };
+
+  const handleDragOver = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'move';
+  };
 
   // --- Helpers ---
   const toggleSelectVenda = (id: string) => {
@@ -196,7 +226,7 @@ const App: React.FC = () => {
       <div className="flex justify-between items-center mb-8">
         <div>
           <h2 className="text-3xl font-black uppercase text-yellow-500 tracking-tighter">Leads</h2>
-          <p className="text-[10px] font-bold text-gray-500 uppercase">Gestão de novas indicações</p>
+          <p className="text-[10px] font-bold text-gray-500 uppercase">Gestão de novas indicações - Arraste para mover</p>
         </div>
         <div className="flex gap-4">
           {selectedIndicacoes.length > 0 && (
@@ -210,11 +240,22 @@ const App: React.FC = () => {
       <SearchBar />
       <div className="flex-1 flex gap-6 overflow-x-auto pb-6 scrollbar-thin">
         {INDICACAO_STATUS_MAP.map(status => (
-          <div key={status} className="kanban-column bg-[#0f172a] rounded-[2.5rem] p-5 border border-gray-800 flex flex-col">
+          <div 
+            key={status} 
+            onDragOver={handleDragOver}
+            onDrop={(e) => handleDrop(e, status, 'indicacao')}
+            className={`kanban-column rounded-[2.5rem] p-5 border border-gray-800 flex flex-col transition-colors duration-200 ${draggedItem?.type === 'indicacao' ? 'bg-yellow-500/5 border-yellow-500/20' : 'bg-[#0f172a]'}`}
+          >
             <h3 className="text-[10px] font-black uppercase text-gray-500 mb-6 text-center tracking-[0.2em]">{status}</h3>
             <div className="flex-1 space-y-4 overflow-y-auto pr-2 scrollbar-thin">
               {filteredIndicacoes.filter(i => i.status === status).map(i => (
-                <div key={i.id} onClick={() => { setModalType('indicacao'); setEditingItem(i); }} className="group bg-[#111827] border border-gray-800 p-6 rounded-[2rem] border-l-4 border-l-yellow-500 hover:scale-[1.02] transition-all cursor-pointer shadow-xl relative">
+                <div 
+                  key={i.id} 
+                  draggable
+                  onDragStart={(e) => handleDragStart(e, i.id!, 'indicacao')}
+                  onClick={() => { setModalType('indicacao'); setEditingItem(i); }} 
+                  className="group bg-[#111827] border border-gray-800 p-6 rounded-[2rem] border-l-4 border-l-yellow-500 hover:scale-[1.02] transition-all cursor-move shadow-xl relative active:opacity-50"
+                >
                    <div className="absolute top-4 left-4" onClick={(e) => e.stopPropagation()}>
                       <input type="checkbox" checked={selectedIndicacoes.includes(i.id!)} onChange={() => toggleSelectIndicacao(i.id!)} className="w-4 h-4 rounded accent-yellow-500" />
                    </div>
@@ -242,7 +283,7 @@ const App: React.FC = () => {
       <div className="flex justify-between items-center mb-8">
         <div>
           <h2 className="text-3xl font-black uppercase text-blue-500 tracking-tighter">Produção</h2>
-          <p className="text-[10px] font-bold text-gray-500 uppercase">Acompanhamento de apólices</p>
+          <p className="text-[10px] font-bold text-gray-500 uppercase">Acompanhamento de apólices - Arraste para mover</p>
         </div>
         <div className="flex gap-4">
           {selectedVendas.length > 0 && (
@@ -256,11 +297,22 @@ const App: React.FC = () => {
       <SearchBar />
       <div className="flex-1 flex gap-6 overflow-x-auto pb-6 scrollbar-thin">
         {VENDA_STATUS_MAP.map(status => (
-          <div key={status} className="kanban-column bg-[#0f172a] rounded-[2.5rem] p-5 border border-gray-800 flex flex-col">
+          <div 
+            key={status} 
+            onDragOver={handleDragOver}
+            onDrop={(e) => handleDrop(e, status, 'venda')}
+            className={`kanban-column rounded-[2.5rem] p-5 border border-gray-800 flex flex-col transition-colors duration-200 ${draggedItem?.type === 'venda' ? 'bg-blue-600/5 border-blue-600/20' : 'bg-[#0f172a]'}`}
+          >
             <h3 className="text-[10px] font-black uppercase text-gray-500 mb-6 text-center tracking-[0.2em]">{status}</h3>
             <div className="flex-1 space-y-4 overflow-y-auto pr-2 scrollbar-thin">
               {filteredVendas.filter(v => v.status === status).map(v => (
-                <div key={v.id} onClick={() => { setModalType('venda'); setEditingItem(v); }} className="group bg-[#111827] border border-gray-800 p-6 rounded-[2rem] border-l-4 border-l-blue-600 hover:scale-[1.02] transition-all cursor-pointer shadow-xl relative">
+                <div 
+                  key={v.id} 
+                  draggable
+                  onDragStart={(e) => handleDragStart(e, v.id!, 'venda')}
+                  onClick={() => { setModalType('venda'); setEditingItem(v); }} 
+                  className="group bg-[#111827] border border-gray-800 p-6 rounded-[2rem] border-l-4 border-l-blue-600 hover:scale-[1.02] transition-all cursor-move shadow-xl relative active:opacity-50"
+                >
                   <div className="absolute top-4 left-4" onClick={(e) => e.stopPropagation()}>
                       <input type="checkbox" checked={selectedVendas.includes(v.id!)} onChange={() => toggleSelectVenda(v.id!)} className="w-4 h-4 rounded accent-blue-500" />
                    </div>
@@ -279,7 +331,7 @@ const App: React.FC = () => {
                     <p className="text-[16px] font-black text-white">{FORMAT_BRL(v.valor)}</p>
                   </div>
 
-                  <div className="grid grid-cols-2 gap-3">
+                  <div className="grid grid-cols-2 gap-3 mb-4">
                     <div className="bg-[#0f172a] p-3 rounded-xl border border-gray-800 text-center">
                       <p className="text-[7px] font-black text-blue-500 uppercase mb-1">C. Cheia</p>
                       <p className="text-[11px] font-bold text-gray-400">{FORMAT_BRL(v.comissao_cheia)}</p>
@@ -288,6 +340,12 @@ const App: React.FC = () => {
                       <p className="text-[7px] font-black text-green-500 uppercase mb-1">C. Vend.</p>
                       <p className="text-[11px] font-bold text-green-400">{FORMAT_BRL(v.comissao_vendedor)}</p>
                     </div>
+                  </div>
+
+                  {/* Nome do Vendedor no final do card */}
+                  <div className="pt-2 border-t border-gray-800 flex items-center justify-between">
+                    <span className="text-[8px] font-black text-gray-500 uppercase">Vendedor:</span>
+                    <span className="text-[9px] font-black text-blue-400 uppercase tracking-tighter">{v.vendedor}</span>
                   </div>
                 </div>
               ))}
@@ -448,33 +506,86 @@ const App: React.FC = () => {
   };
 
   /**
-   * Fix: Added missing LeadSuhaiView component definition.
-   * This view displays all leads marked with the 'suhai' partnership flag.
+   * LeadSuhaiView - Lista de registros de produção com flag Suhai.
+   * Filtro rigoroso: Apenas Suhai AND Pagamento Efetuado.
    */
   const LeadSuhaiView = () => {
-    const suhaiLeads = indicacoes.filter(i => i.suhai);
+    // FILTRO ATUALIZADO: Apenas Suhai E status Pagamento Efetuado
+    const suhaiRecords = filteredVendas.filter(v => v.suhai && v.status === 'Pagamento Efetuado');
+    const totalComissao = suhaiRecords.reduce((acc, v) => acc + (user?.isAdmin ? v.comissao_cheia : v.comissao_vendedor), 0);
+    const totalPremio = suhaiRecords.reduce((acc, v) => acc + v.valor, 0);
+
     return (
       <div className="animate-in fade-in duration-500">
-        <h2 className="text-4xl font-black uppercase text-green-500 mb-10 tracking-tighter">Oportunidades Suhai</h2>
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
-          {suhaiLeads.map(i => (
-            <div key={i.id} className="bg-[#111827] p-8 rounded-[2.5rem] border border-green-900/30 border-l-8 border-l-green-500 shadow-xl relative overflow-hidden">
-               <div className="absolute top-4 right-4 text-green-500/20 text-3xl"><i className="fas fa-star"></i></div>
-               <h4 className="text-[14px] font-black uppercase text-white mb-2">{i.cliente}</h4>
-               <p className="text-[11px] text-blue-400 font-black mb-1"><i className="fab fa-whatsapp mr-1"></i> {i.tel}</p>
-               <p className="text-[10px] text-gray-500 uppercase font-black">{i.veiculo}</p>
-               <div className="mt-4 pt-4 border-t border-gray-800">
-                  <p className="text-[9px] text-gray-500 uppercase font-black">Vendedor: <span className="text-gray-300">{i.vendedor}</span></p>
-                  <p className="text-[9px] text-gray-500 uppercase font-black mt-1">Status: <span className="text-yellow-500">{i.status}</span></p>
-               </div>
-            </div>
-          ))}
-          {suhaiLeads.length === 0 && (
-            <div className="col-span-3 text-center py-20 opacity-30">
-               <i className="fas fa-star text-6xl mb-4 text-green-500"></i>
-               <p className="text-sm font-black uppercase">Nenhum lead Suhai encontrado</p>
-            </div>
-          )}
+        <h2 className="text-4xl font-black uppercase text-green-500 mb-10 tracking-tighter">Oportunidades Suhai Gold</h2>
+        
+        {/* Sumários Financeiros */}
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-8 mb-10">
+           <div className="bg-[#111827] p-8 rounded-[2rem] border border-green-500/30 shadow-2xl relative overflow-hidden group">
+              <div className="absolute -right-4 -top-4 text-6xl text-green-500/5 group-hover:rotate-12 transition-transform"><i className="fas fa-hand-holding-usd"></i></div>
+              <p className="text-gray-500 text-[10px] font-black uppercase mb-1 tracking-widest">Total Comissão Suhai (Pagos)</p>
+              <h2 className="text-5xl font-black text-green-500 tracking-tighter">{FORMAT_BRL(totalComissao)}</h2>
+           </div>
+           <div className="bg-[#111827] p-8 rounded-[2rem] border border-blue-500/30 shadow-2xl relative overflow-hidden group">
+              <div className="absolute -right-4 -top-4 text-6xl text-blue-500/5 group-hover:rotate-12 transition-transform"><i className="fas fa-file-invoice-dollar"></i></div>
+              <p className="text-gray-500 text-[10px] font-black uppercase mb-1 tracking-widest">Prêmio Líquido Total</p>
+              <h2 className="text-5xl font-black text-blue-500 tracking-tighter">{FORMAT_BRL(totalPremio)}</h2>
+           </div>
+        </div>
+
+        {/* Tabela de Registros */}
+        <div className="bg-[#111827] rounded-[2.5rem] border border-gray-800 overflow-hidden shadow-2xl">
+           <div className="overflow-x-auto">
+              <table className="w-full text-left border-collapse">
+                <thead className="bg-[#0f172a] text-gray-400 text-[10px] uppercase font-black">
+                   <tr>
+                      <th className="p-6 border-b border-gray-800">Vendedor</th>
+                      <th className="p-6 border-b border-gray-800">Cliente / Contato</th>
+                      <th className="p-6 border-b border-gray-800">Prêmio Total</th>
+                      <th className="p-6 border-b border-gray-800">Sua Parte</th>
+                      <th className="p-6 border-b border-gray-800 text-center">Status</th>
+                   </tr>
+                </thead>
+                <tbody className="text-xs font-bold uppercase">
+                   {suhaiRecords.map(v => (
+                      <tr key={v.id} className="border-b border-gray-800 hover:bg-gray-800/20 transition-all group">
+                         <td className="p-6">
+                            <span className="bg-blue-600/10 text-blue-400 px-4 py-1.5 rounded-full text-[9px] font-black border border-blue-500/20">
+                               {v.vendedor}
+                            </span>
+                         </td>
+                         <td className="p-6">
+                            <div className="text-white text-sm font-black mb-1">{v.cliente}</div>
+                            <div className="text-[10px] text-gray-500 font-mono tracking-tighter">{v.tel}</div>
+                         </td>
+                         <td className="p-6 text-gray-400 font-mono">
+                            {FORMAT_BRL(v.valor)}
+                         </td>
+                         <td className="p-6 font-black">
+                            <span className="text-green-500 font-mono text-sm">
+                               {FORMAT_BRL(user?.isAdmin ? v.comissao_cheia : v.comissao_vendedor)}
+                            </span>
+                         </td>
+                         <td className="p-6">
+                            <div className="flex justify-center">
+                               <span className="text-[9px] font-black uppercase px-4 py-1.5 rounded-xl bg-green-500/10 text-green-500 border border-green-500/20">
+                                  {v.status}
+                               </span>
+                            </div>
+                         </td>
+                      </tr>
+                   ))}
+                   {suhaiRecords.length === 0 && (
+                      <tr>
+                         <td colSpan={5} className="p-20 text-center opacity-30">
+                            <i className="fas fa-star text-6xl mb-4 text-green-500"></i>
+                            <p className="text-sm font-black uppercase">Nenhum registro Suhai pago encontrado</p>
+                         </td>
+                      </tr>
+                   )}
+                </tbody>
+              </table>
+           </div>
         </div>
       </div>
     );
