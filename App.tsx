@@ -4,7 +4,6 @@ import { AuthUser, User, Venda, Indicacao, Meta, Empresa } from './types';
 import { cloud } from './services/firebase';
 import { FORMAT_BRL, INDICACAO_STATUS_MAP, VENDA_STATUS_MAP } from './constants';
 import Layout from './components/Layout';
-import AiAssistant from './components/AiAssistant';
 
 const App: React.FC = () => {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
@@ -25,10 +24,9 @@ const App: React.FC = () => {
   const [selectedVendas, setSelectedVendas] = useState<string[]>([]);
   const [selectedIndicacoes, setSelectedIndicacoes] = useState<string[]>([]);
 
-  // Modals / AI
+  // Modals
   const [modalType, setModalType] = useState<'venda' | 'indicacao' | 'usuario' | 'empresa' | null>(null);
   const [editingItem, setEditingItem] = useState<any>(null);
-  const [aiLead, setAiLead] = useState<any>(null);
 
   // Drag and Drop State
   const [draggedItem, setDraggedItem] = useState<{ id: string, type: 'venda' | 'indicacao' } | null>(null);
@@ -78,7 +76,12 @@ const App: React.FC = () => {
   const filteredVendas = useMemo(() => {
     let list = user?.isAdmin ? vendas : vendas.filter(v => v.vendedor === user?.nome);
     if (searchTerm) {
-      list = list.filter(v => v.cliente.toLowerCase().includes(searchTerm.toLowerCase()));
+      const lower = searchTerm.toLowerCase();
+      list = list.filter(v => 
+        v.cliente.toLowerCase().includes(lower) || 
+        v.vendedor.toLowerCase().includes(lower) ||
+        v.empresa?.toLowerCase().includes(lower)
+      );
     }
     return list;
   }, [vendas, user, searchTerm]);
@@ -86,39 +89,39 @@ const App: React.FC = () => {
   const filteredIndicacoes = useMemo(() => {
     let list = user?.isAdmin ? indicacoes : indicacoes.filter(i => i.vendedor === user?.nome);
     if (searchTerm) {
-      list = list.filter(i => i.cliente.toLowerCase().includes(searchTerm.toLowerCase()) || i.veiculo.toLowerCase().includes(searchTerm.toLowerCase()));
+      const lower = searchTerm.toLowerCase();
+      list = list.filter(i => 
+        i.cliente.toLowerCase().includes(lower) || 
+        i.veiculo.toLowerCase().includes(lower) ||
+        i.vendedor.toLowerCase().includes(lower)
+      );
     }
     return list;
   }, [indicacoes, user, searchTerm]);
 
-  // --- Drag and Drop Handlers ---
-  const handleDragStart = (e: React.DragEvent, id: string, type: 'venda' | 'indicacao') => {
+  // --- Drag and Drop Logic ---
+  const onDragStart = (e: React.DragEvent, id: string, type: 'venda' | 'indicacao') => {
     setDraggedItem({ id, type });
-    e.dataTransfer.setData('text/plain', id);
     e.dataTransfer.effectAllowed = 'move';
   };
 
-  const handleDrop = async (e: React.DragEvent, newStatus: string, type: 'venda' | 'indicacao') => {
+  const onDragOver = (e: React.DragEvent) => {
+    e.preventDefault();
+  };
+
+  const onDrop = async (e: React.DragEvent, newStatus: string, type: 'venda' | 'indicacao') => {
     e.preventDefault();
     if (!draggedItem || draggedItem.type !== type) return;
     
-    // Fix: Adjusted comparison to correct type value 'venda' to resolve TypeScript mismatch
-    const collection = type === 'venda' ? 'vendas' : 'indicacoes';
+    const collection = draggedItem.type === 'venda' ? 'vendas' : 'indicacoes';
     try {
-      // Fix: Used the computed 'collection' variable to ensure consistency and fix the type error
       await cloud.updateStatus(collection, draggedItem.id, newStatus);
     } catch (err) {
-      console.error("Erro ao mover item:", err);
+      console.error("Erro ao atualizar status:", err);
     }
     setDraggedItem(null);
   };
 
-  const handleDragOver = (e: React.DragEvent) => {
-    e.preventDefault();
-    e.dataTransfer.dropEffect = 'move';
-  };
-
-  // --- Helpers ---
   const toggleSelectVenda = (id: string) => {
     setSelectedVendas(prev => prev.includes(id) ? prev.filter(i => i !== id) : [...prev, id]);
   };
@@ -129,7 +132,7 @@ const App: React.FC = () => {
 
   const bulkDeleteVendas = async () => {
     if (!selectedVendas.length) return;
-    if (confirm(`Excluir ${selectedVendas.length} registros de produção permanentemente?`)) {
+    if (confirm(`Excluir ${selectedVendas.length} registros?`)) {
       for (const id of selectedVendas) await cloud.apagar('vendas', id);
       setSelectedVendas([]);
     }
@@ -137,25 +140,11 @@ const App: React.FC = () => {
 
   const bulkDeleteIndicacoes = async () => {
     if (!selectedIndicacoes.length) return;
-    if (confirm(`Excluir ${selectedIndicacoes.length} leads permanentemente?`)) {
+    if (confirm(`Excluir ${selectedIndicacoes.length} leads?`)) {
       for (const id of selectedIndicacoes) await cloud.apagar('indicacoes', id);
       setSelectedIndicacoes([]);
     }
   };
-
-  // --- Search UI ---
-  const SearchBar = () => (
-    <div className="relative mb-6">
-      <i className="fas fa-search absolute left-4 top-1/2 -translate-y-1/2 text-gray-500"></i>
-      <input 
-        type="text" 
-        placeholder="Localizar cliente ou registro..." 
-        className="w-full bg-[#111827] border border-gray-800 rounded-2xl py-4 pl-12 pr-4 text-xs font-bold text-white outline-none focus:border-blue-500 transition-all uppercase"
-        value={searchTerm}
-        onChange={(e) => setSearchTerm(e.target.value)}
-      />
-    </div>
-  );
 
   // --- Views ---
 
@@ -176,17 +165,14 @@ const App: React.FC = () => {
 
         <div className="grid grid-cols-1 md:grid-cols-3 gap-8 mb-16">
           <div className="bg-[#111827] p-8 rounded-[2rem] border border-blue-900/30 shadow-2xl relative overflow-hidden group">
-            <div className="absolute -right-4 -top-4 text-6xl text-blue-500/5 group-hover:rotate-12 transition-transform"><i className="fas fa-shopping-bag"></i></div>
             <p className="text-gray-500 text-[10px] font-black uppercase mb-1">Vendas (Hoje)</p>
             <h2 className="text-6xl font-black text-white">{vHoje.length}</h2>
           </div>
           <div className="bg-[#111827] p-8 rounded-[2rem] border border-green-900/30 shadow-2xl relative overflow-hidden group">
-            <div className="absolute -right-4 -top-4 text-6xl text-green-500/5 group-hover:rotate-12 transition-transform"><i className="fas fa-dollar-sign"></i></div>
             <p className="text-gray-500 text-[10px] font-black uppercase mb-1">Comissão (Hoje)</p>
             <h2 className="text-6xl font-black text-green-500">{FORMAT_BRL(comissaoHoje)}</h2>
           </div>
           <div className="bg-[#111827] p-8 rounded-[2rem] border border-gray-800 shadow-2xl relative overflow-hidden group">
-            <div className="absolute -right-4 -top-4 text-6xl text-white/5 group-hover:rotate-12 transition-transform"><i className="fas fa-users"></i></div>
             <p className="text-gray-500 text-[10px] font-black uppercase mb-1">Leads Ativos</p>
             <h2 className="text-6xl font-black text-white">{filteredIndicacoes.length}</h2>
           </div>
@@ -226,7 +212,7 @@ const App: React.FC = () => {
       <div className="flex justify-between items-center mb-8">
         <div>
           <h2 className="text-3xl font-black uppercase text-yellow-500 tracking-tighter">Leads</h2>
-          <p className="text-[10px] font-bold text-gray-500 uppercase">Gestão de novas indicações - Arraste para mover</p>
+          <p className="text-[10px] font-bold text-gray-500 uppercase">Arraste os cartões para mudar o status</p>
         </div>
         <div className="flex gap-4">
           {selectedIndicacoes.length > 0 && (
@@ -237,14 +223,25 @@ const App: React.FC = () => {
           <button onClick={() => { setModalType('indicacao'); setEditingItem(null); }} className="bg-yellow-500 hover:bg-yellow-400 px-8 py-3 rounded-2xl font-black text-[11px] uppercase text-black transition-all shadow-lg shadow-yellow-500/20">Novo Lead</button>
         </div>
       </div>
-      <SearchBar />
+      
+      <div className="relative mb-6">
+        <i className="fas fa-search absolute left-4 top-1/2 -translate-y-1/2 text-gray-500"></i>
+        <input 
+          type="text" 
+          placeholder="BUSCAR POR NOME, VEÍCULO OU VENDEDOR..." 
+          className="w-full bg-[#111827] border border-gray-800 rounded-2xl py-4 pl-12 pr-4 text-xs font-bold text-white outline-none focus:border-yellow-500 transition-all uppercase"
+          value={searchTerm}
+          onChange={(e) => setSearchTerm(e.target.value)}
+        />
+      </div>
+
       <div className="flex-1 flex gap-6 overflow-x-auto pb-6 scrollbar-thin">
         {INDICACAO_STATUS_MAP.map(status => (
           <div 
             key={status} 
-            onDragOver={handleDragOver}
-            onDrop={(e) => handleDrop(e, status, 'indicacao')}
-            className={`kanban-column rounded-[2.5rem] p-5 border border-gray-800 flex flex-col transition-colors duration-200 ${draggedItem?.type === 'indicacao' ? 'bg-yellow-500/5 border-yellow-500/20' : 'bg-[#0f172a]'}`}
+            onDragOver={onDragOver}
+            onDrop={(e) => onDrop(e, status, 'indicacao')}
+            className={`kanban-column rounded-[2.5rem] p-5 border flex flex-col transition-all duration-300 ${draggedItem?.type === 'indicacao' ? 'bg-yellow-500/5 border-yellow-500/40 shadow-2xl' : 'bg-[#0f172a] border-gray-800'}`}
           >
             <h3 className="text-[10px] font-black uppercase text-gray-500 mb-6 text-center tracking-[0.2em]">{status}</h3>
             <div className="flex-1 space-y-4 overflow-y-auto pr-2 scrollbar-thin">
@@ -252,15 +249,14 @@ const App: React.FC = () => {
                 <div 
                   key={i.id} 
                   draggable
-                  onDragStart={(e) => handleDragStart(e, i.id!, 'indicacao')}
+                  onDragStart={(e) => onDragStart(e, i.id!, 'indicacao')}
                   onClick={() => { setModalType('indicacao'); setEditingItem(i); }} 
-                  className="group bg-[#111827] border border-gray-800 p-6 rounded-[2rem] border-l-4 border-l-yellow-500 hover:scale-[1.02] transition-all cursor-move shadow-xl relative active:opacity-50"
+                  className="group bg-[#111827] border border-gray-800 p-6 rounded-[2rem] border-l-4 border-l-yellow-500 hover:scale-[1.02] transition-all cursor-grab active:cursor-grabbing shadow-xl relative"
                 >
                    <div className="absolute top-4 left-4" onClick={(e) => e.stopPropagation()}>
                       <input type="checkbox" checked={selectedIndicacoes.includes(i.id!)} onChange={() => toggleSelectIndicacao(i.id!)} className="w-4 h-4 rounded accent-yellow-500" />
                    </div>
-                   <div className="absolute top-4 right-4 flex gap-3">
-                      <div className="text-blue-500 opacity-0 group-hover:opacity-100 transition-opacity cursor-help" onClick={(e) => { e.stopPropagation(); setAiLead(i); }}><i className="fas fa-robot"></i></div>
+                   <div className="absolute top-4 right-4">
                       <div className="text-red-500 opacity-0 group-hover:opacity-100 transition-opacity cursor-pointer" onClick={async (e) => { e.stopPropagation(); if(confirm("Deseja excluir este lead?")) await cloud.apagar('indicacoes', i.id!); }}><i className="fas fa-trash"></i></div>
                    </div>
                   <h4 className="text-[12px] font-black uppercase text-white mb-1 mt-4">{i.cliente}</h4>
@@ -283,7 +279,7 @@ const App: React.FC = () => {
       <div className="flex justify-between items-center mb-8">
         <div>
           <h2 className="text-3xl font-black uppercase text-blue-500 tracking-tighter">Produção</h2>
-          <p className="text-[10px] font-bold text-gray-500 uppercase">Acompanhamento de apólices - Arraste para mover</p>
+          <p className="text-[10px] font-bold text-gray-500 uppercase">Movimente livremente entre as colunas</p>
         </div>
         <div className="flex gap-4">
           {selectedVendas.length > 0 && (
@@ -294,14 +290,25 @@ const App: React.FC = () => {
           <button onClick={() => { setModalType('venda'); setEditingItem(null); }} className="bg-blue-600 hover:bg-blue-500 px-8 py-3 rounded-2xl font-black text-[11px] uppercase text-white transition-all shadow-lg shadow-blue-500/20">Lançar Venda</button>
         </div>
       </div>
-      <SearchBar />
+
+      <div className="relative mb-6">
+        <i className="fas fa-search absolute left-4 top-1/2 -translate-y-1/2 text-gray-500"></i>
+        <input 
+          type="text" 
+          placeholder="BUSCAR CLIENTE, EMPRESA OU VENDEDOR..." 
+          className="w-full bg-[#111827] border border-gray-800 rounded-2xl py-4 pl-12 pr-4 text-xs font-bold text-white outline-none focus:border-blue-500 transition-all uppercase"
+          value={searchTerm}
+          onChange={(e) => setSearchTerm(e.target.value)}
+        />
+      </div>
+
       <div className="flex-1 flex gap-6 overflow-x-auto pb-6 scrollbar-thin">
         {VENDA_STATUS_MAP.map(status => (
           <div 
             key={status} 
-            onDragOver={handleDragOver}
-            onDrop={(e) => handleDrop(e, status, 'venda')}
-            className={`kanban-column rounded-[2.5rem] p-5 border border-gray-800 flex flex-col transition-colors duration-200 ${draggedItem?.type === 'venda' ? 'bg-blue-600/5 border-blue-600/20' : 'bg-[#0f172a]'}`}
+            onDragOver={onDragOver}
+            onDrop={(e) => onDrop(e, status, 'venda')}
+            className={`kanban-column rounded-[2.5rem] p-5 border flex flex-col transition-all duration-300 ${draggedItem?.type === 'venda' ? 'bg-blue-600/5 border-blue-600/40 shadow-2xl' : 'bg-[#0f172a] border-gray-800'}`}
           >
             <h3 className="text-[10px] font-black uppercase text-gray-500 mb-6 text-center tracking-[0.2em]">{status}</h3>
             <div className="flex-1 space-y-4 overflow-y-auto pr-2 scrollbar-thin">
@@ -309,15 +316,15 @@ const App: React.FC = () => {
                 <div 
                   key={v.id} 
                   draggable
-                  onDragStart={(e) => handleDragStart(e, v.id!, 'venda')}
+                  onDragStart={(e) => onDragStart(e, v.id!, 'venda')}
                   onClick={() => { setModalType('venda'); setEditingItem(v); }} 
-                  className="group bg-[#111827] border border-gray-800 p-6 rounded-[2rem] border-l-4 border-l-blue-600 hover:scale-[1.02] transition-all cursor-move shadow-xl relative active:opacity-50"
+                  className="group bg-[#111827] border border-gray-800 p-6 rounded-[2rem] border-l-4 border-l-blue-600 hover:scale-[1.02] transition-all cursor-grab active:cursor-grabbing shadow-xl relative"
                 >
                   <div className="absolute top-4 left-4" onClick={(e) => e.stopPropagation()}>
                       <input type="checkbox" checked={selectedVendas.includes(v.id!)} onChange={() => toggleSelectVenda(v.id!)} className="w-4 h-4 rounded accent-blue-500" />
                    </div>
                    <div className="absolute top-4 right-4">
-                      <div className="text-red-500 opacity-0 group-hover:opacity-100 transition-opacity cursor-pointer" onClick={async (e) => { e.stopPropagation(); if(confirm("Deseja excluir este registro de produção?")) await cloud.apagar('vendas', v.id!); }}><i className="fas fa-trash"></i></div>
+                      <div className="text-red-500 opacity-0 group-hover:opacity-100 transition-opacity cursor-pointer" onClick={async (e) => { e.stopPropagation(); if(confirm("Deseja excluir este registro?")) await cloud.apagar('vendas', v.id!); }}><i className="fas fa-trash"></i></div>
                    </div>
                   <div className="flex justify-between items-start mb-1 mt-4">
                     <h4 className="text-[12px] font-black uppercase text-white leading-tight pr-4">{v.cliente}</h4>
@@ -342,10 +349,10 @@ const App: React.FC = () => {
                     </div>
                   </div>
 
-                  {/* Nome do Vendedor no final do card */}
-                  <div className="pt-2 border-t border-gray-800 flex items-center justify-between">
-                    <span className="text-[8px] font-black text-gray-500 uppercase">Vendedor:</span>
-                    <span className="text-[9px] font-black text-blue-400 uppercase tracking-tighter">{v.vendedor}</span>
+                  {/* VENDEDOR NA BASE DO CARD */}
+                  <div className="pt-3 border-t border-gray-800 flex justify-between items-center">
+                    <span className="text-[8px] font-black uppercase text-gray-500 tracking-wider">Vendedor</span>
+                    <span className="text-[10px] font-black uppercase text-blue-400">{v.vendedor}</span>
                   </div>
                 </div>
               ))}
@@ -505,43 +512,35 @@ const App: React.FC = () => {
     );
   };
 
-  /**
-   * LeadSuhaiView - Lista de registros de produção com flag Suhai.
-   * Filtro rigoroso: Apenas Suhai AND Pagamento Efetuado.
-   */
   const LeadSuhaiView = () => {
-    // FILTRO ATUALIZADO: Apenas Suhai E status Pagamento Efetuado
+    // FILTRO RIGOROSO: Apenas Suhai E status Pagamento Efetuado
     const suhaiRecords = filteredVendas.filter(v => v.suhai && v.status === 'Pagamento Efetuado');
     const totalComissao = suhaiRecords.reduce((acc, v) => acc + (user?.isAdmin ? v.comissao_cheia : v.comissao_vendedor), 0);
     const totalPremio = suhaiRecords.reduce((acc, v) => acc + v.valor, 0);
 
     return (
       <div className="animate-in fade-in duration-500">
-        <h2 className="text-4xl font-black uppercase text-green-500 mb-10 tracking-tighter">Oportunidades Suhai Gold</h2>
+        <h2 className="text-4xl font-black uppercase text-green-500 mb-10 tracking-tighter">Suhai Gold - Pagos</h2>
         
-        {/* Sumários Financeiros */}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-8 mb-10">
            <div className="bg-[#111827] p-8 rounded-[2rem] border border-green-500/30 shadow-2xl relative overflow-hidden group">
-              <div className="absolute -right-4 -top-4 text-6xl text-green-500/5 group-hover:rotate-12 transition-transform"><i className="fas fa-hand-holding-usd"></i></div>
-              <p className="text-gray-500 text-[10px] font-black uppercase mb-1 tracking-widest">Total Comissão Suhai (Pagos)</p>
+              <p className="text-gray-500 text-[10px] font-black uppercase mb-1 tracking-widest">Total Comissão (Pagos Suhai)</p>
               <h2 className="text-5xl font-black text-green-500 tracking-tighter">{FORMAT_BRL(totalComissao)}</h2>
            </div>
            <div className="bg-[#111827] p-8 rounded-[2rem] border border-blue-500/30 shadow-2xl relative overflow-hidden group">
-              <div className="absolute -right-4 -top-4 text-6xl text-blue-500/5 group-hover:rotate-12 transition-transform"><i className="fas fa-file-invoice-dollar"></i></div>
               <p className="text-gray-500 text-[10px] font-black uppercase mb-1 tracking-widest">Prêmio Líquido Total</p>
               <h2 className="text-5xl font-black text-blue-500 tracking-tighter">{FORMAT_BRL(totalPremio)}</h2>
            </div>
         </div>
 
-        {/* Tabela de Registros */}
         <div className="bg-[#111827] rounded-[2.5rem] border border-gray-800 overflow-hidden shadow-2xl">
            <div className="overflow-x-auto">
               <table className="w-full text-left border-collapse">
                 <thead className="bg-[#0f172a] text-gray-400 text-[10px] uppercase font-black">
                    <tr>
                       <th className="p-6 border-b border-gray-800">Vendedor</th>
-                      <th className="p-6 border-b border-gray-800">Cliente / Contato</th>
-                      <th className="p-6 border-b border-gray-800">Prêmio Total</th>
+                      <th className="p-6 border-b border-gray-800">Cliente</th>
+                      <th className="p-6 border-b border-gray-800">Prêmio</th>
                       <th className="p-6 border-b border-gray-800">Sua Parte</th>
                       <th className="p-6 border-b border-gray-800 text-center">Status</th>
                    </tr>
@@ -556,33 +555,17 @@ const App: React.FC = () => {
                          </td>
                          <td className="p-6">
                             <div className="text-white text-sm font-black mb-1">{v.cliente}</div>
-                            <div className="text-[10px] text-gray-500 font-mono tracking-tighter">{v.tel}</div>
+                            <div className="text-[10px] text-gray-500 font-mono">{v.tel}</div>
                          </td>
-                         <td className="p-6 text-gray-400 font-mono">
-                            {FORMAT_BRL(v.valor)}
-                         </td>
-                         <td className="p-6 font-black">
-                            <span className="text-green-500 font-mono text-sm">
-                               {FORMAT_BRL(user?.isAdmin ? v.comissao_cheia : v.comissao_vendedor)}
-                            </span>
-                         </td>
+                         <td className="p-6 text-gray-400 font-mono">{FORMAT_BRL(v.valor)}</td>
+                         <td className="p-6 font-black text-green-500 font-mono text-sm">{FORMAT_BRL(user?.isAdmin ? v.comissao_cheia : v.comissao_vendedor)}</td>
                          <td className="p-6">
                             <div className="flex justify-center">
-                               <span className="text-[9px] font-black uppercase px-4 py-1.5 rounded-xl bg-green-500/10 text-green-500 border border-green-500/20">
-                                  {v.status}
-                               </span>
+                               <span className="text-[9px] font-black uppercase px-4 py-1.5 rounded-xl bg-green-500/10 text-green-500 border border-green-500/20">PAGO</span>
                             </div>
                          </td>
                       </tr>
                    ))}
-                   {suhaiRecords.length === 0 && (
-                      <tr>
-                         <td colSpan={5} className="p-20 text-center opacity-30">
-                            <i className="fas fa-star text-6xl mb-4 text-green-500"></i>
-                            <p className="text-sm font-black uppercase">Nenhum registro Suhai pago encontrado</p>
-                         </td>
-                      </tr>
-                   )}
                 </tbody>
               </table>
            </div>
@@ -591,55 +574,12 @@ const App: React.FC = () => {
     );
   };
 
-  const Configuracoes = () => (
-    <div className="animate-in fade-in duration-500 max-w-4xl mx-auto space-y-10">
-      <div className="flex justify-between items-center">
-        <div>
-          <h2 className="text-4xl font-black uppercase text-gray-300 tracking-tighter">Configurações</h2>
-          <p className="text-[10px] font-bold text-gray-500 uppercase">Ajustes estruturais do sistema</p>
-        </div>
-        <button onClick={() => { setModalType('empresa'); setEditingItem(null); }} className="bg-white/5 border border-white/10 hover:bg-white/10 text-white px-8 py-3 rounded-2xl font-black text-[11px] uppercase transition-all shadow-lg">Nova Empresa</button>
-      </div>
-
-      <div className="bg-[#111827] p-10 rounded-[3rem] border border-gray-800 shadow-2xl">
-        <h3 className="text-xl font-black uppercase text-blue-500 mb-8 tracking-tighter"><i className="fas fa-building mr-3"></i> Empresas Parceiras</h3>
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          {empresas.map(emp => (
-            <div key={emp.id} className="bg-[#0f172a] p-6 rounded-2xl border border-gray-800 flex justify-between items-center group">
-              <span className="text-sm font-black uppercase text-white">{emp.nome}</span>
-              <div className="flex gap-4 opacity-0 group-hover:opacity-100 transition-opacity">
-                <button onClick={() => { setModalType('empresa'); setEditingItem(emp); }} className="text-blue-400 hover:text-blue-300"><i className="fas fa-edit"></i></button>
-                <button onClick={async () => { if(confirm("Remover empresa?")) await cloud.apagar('empresas', emp.id!); }} className="text-red-500 hover:text-red-400"><i className="fas fa-trash"></i></button>
-              </div>
-            </div>
-          ))}
-          {empresas.length === 0 && <p className="col-span-2 text-center text-gray-600 uppercase font-black py-10 opacity-30">Nenhuma empresa cadastrada</p>}
-        </div>
-      </div>
-
-      <div className="bg-[#111827] p-10 rounded-[3rem] border border-red-900/30 text-center shadow-2xl">
-        <i className="fas fa-exclamation-triangle text-4xl text-red-600 mb-6"></i>
-        <h3 className="text-lg font-black uppercase text-white mb-2 tracking-tighter">Zona de Perigo</h3>
-        <p className="text-[10px] text-gray-500 mb-8 uppercase font-bold italic">Atenção: Estas ações são definitivas e não podem ser desfeitas.</p>
-        <button onClick={async () => { if(confirm("Deseja resetar o banco de produção? Esta ação é irreversível.")) { for(let v of vendas) await cloud.apagar('vendas', v.id!); alert("Banco resetado."); } }} className="w-full bg-red-600/10 text-red-500 border-2 border-red-600 p-6 rounded-[2rem] font-black uppercase transition-all hover:bg-red-600 hover:text-white">Executar Factory Reset</button>
-      </div>
-    </div>
-  );
-
   const ModalForm = () => {
     const [vf, setVf] = useState<any>(editingItem || {});
     
     useEffect(() => {
       if (modalType === 'venda' && !editingItem && user) {
-        setVf({ 
-          vendedor: user.nome, 
-          status: 'Fazer Vistoria',
-          suhai: false,
-          valor: 0,
-          comissao_cheia: 0,
-          comissao_vendedor: 0,
-          empresa: ''
-        });
+        setVf({ vendedor: user.nome, status: 'Fazer Vistoria', suhai: false, valor: 0, comissao_cheia: 0, comissao_vendedor: 0, empresa: '' });
       }
     }, [modalType, editingItem, user]);
 
@@ -653,7 +593,7 @@ const App: React.FC = () => {
         if (modalType === 'usuario') await cloud.salvarUsuario({ ...vf });
         if (modalType === 'empresa') await cloud.salvarEmpresa({ ...vf });
         setModalType(null);
-      } catch (err) { alert("Erro ao salvar dados."); }
+      } catch (err) { alert("Erro ao salvar."); }
     };
 
     return (
@@ -666,14 +606,13 @@ const App: React.FC = () => {
           
           <form onSubmit={save} className="space-y-6">
             <div className="space-y-4">
-               <label className="text-[10px] font-black text-gray-600 uppercase ml-2">Identificação</label>
-               <input value={vf.cliente || vf.nome || ''} onChange={e => setVf({...vf, [modalType === 'usuario' || modalType === 'empresa' ? 'nome' : 'cliente']: e.target.value})} placeholder={modalType === 'empresa' ? "NOME DA EMPRESA/SEGURADORA" : "NOME COMPLETO"} className="w-full p-5 bg-[#0f172a] border border-gray-800 rounded-2xl text-white font-bold outline-none uppercase focus:border-blue-500" required />
-               {modalType !== 'usuario' && modalType !== 'empresa' && (
+               <input value={vf.cliente || vf.nome || ''} onChange={e => setVf({...vf, [modalType === 'usuario' || modalType === 'empresa' ? 'nome' : 'cliente']: e.target.value})} placeholder="NOME COMPLETO" className="w-full p-5 bg-[#0f172a] border border-gray-800 rounded-2xl text-white font-bold outline-none uppercase focus:border-blue-500" required />
+               {(modalType === 'venda' || modalType === 'indicacao') && (
                  <>
                   <input value={vf.tel || ''} onChange={e => setVf({...vf, tel: e.target.value})} placeholder="WHATSAPP / CELULAR" className="w-full p-5 bg-[#0f172a] border border-gray-800 rounded-2xl text-white font-bold outline-none" required />
                   {modalType === 'venda' && (
                     <select value={vf.empresa || ''} onChange={e => setVf({...vf, empresa: e.target.value})} className="w-full p-5 bg-[#0f172a] border border-gray-800 rounded-2xl text-white font-bold uppercase outline-none focus:border-blue-500" required>
-                       <option value="">Selecionar Empresa Parceira...</option>
+                       <option value="">Selecionar Seguradora...</option>
                        {empresas.map(emp => <option key={emp.id} value={emp.nome}>{emp.nome}</option>)}
                     </select>
                   )}
@@ -683,7 +622,6 @@ const App: React.FC = () => {
 
             {modalType === 'venda' && (
               <div className="space-y-5">
-                <label className="text-[10px] font-black text-gray-600 uppercase ml-2">Financeiro e Logística</label>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                    <input type="number" step="0.01" value={vf.valor || ''} onChange={e => setVf({...vf, valor: Number(e.target.value)})} placeholder="PRÊMIO TOTAL (R$)" className="p-5 bg-[#0f172a] border border-gray-800 rounded-2xl text-white font-mono outline-none" required />
                    <input type="number" step="0.01" value={vf.comissao_cheia || ''} onChange={e => setVf({...vf, comissao_cheia: Number(e.target.value)})} placeholder="COMISSÃO TOTAL (R$)" className="p-5 bg-[#0f172a] border border-gray-800 rounded-2xl text-white font-mono outline-none" required />
@@ -692,46 +630,20 @@ const App: React.FC = () => {
                       {VENDA_STATUS_MAP.map(s => <option key={s} value={s}>{s}</option>)}
                    </select>
                 </div>
-                
                 <div className="flex items-center gap-4 p-5 bg-[#0f172a] border border-gray-800 rounded-2xl">
                   <input type="checkbox" checked={vf.suhai || false} onChange={e => setVf({...vf, suhai: e.target.checked})} className="w-6 h-6 accent-green-500" id="m-suhai" />
                   <label htmlFor="m-suhai" className="text-[10px] font-black uppercase text-green-500">Parceria Suhai Gold</label>
                 </div>
-
-                <div className="space-y-2">
-                  <label className="text-[10px] font-black text-gray-600 uppercase ml-2">Responsável pela Venda</label>
-                  <select 
-                    value={vf.vendedor || ''} 
-                    onChange={e => setVf({...vf, vendedor: e.target.value})} 
-                    disabled={!user?.isAdmin}
-                    className={`w-full p-5 bg-[#0f172a] border border-gray-800 rounded-2xl text-white font-bold uppercase outline-none ${!user?.isAdmin ? 'opacity-50 cursor-not-allowed border-blue-900/50' : 'focus:border-blue-500'}`}
-                    required
-                  >
-                    <option value="">Selecione o Vendedor...</option>
-                    {usuarios.map(u => <option key={u.id} value={u.nome}>{u.nome}</option>)}
-                    {user?.isAdmin && !usuarios.find(u => u.nome === user.nome) && <option value={user.nome}>{user.nome}</option>}
-                  </select>
-                </div>
-              </div>
-            )}
-
-            {modalType === 'usuario' && (
-              <div className="space-y-4">
-                 <input value={vf.login || ''} onChange={e => setVf({...vf, login: e.target.value})} placeholder="LOGIN DE ACESSO" className="w-full p-5 bg-[#0f172a] border border-gray-800 rounded-2xl text-white font-bold outline-none" required />
-                 <input type="password" value={vf.senha || ''} onChange={e => setVf({...vf, senha: e.target.value})} placeholder="SENHA" className="w-full p-5 bg-[#0f172a] border border-gray-800 rounded-2xl text-white font-bold outline-none" required />
-                 <div className="grid grid-cols-2 gap-4">
-                    <select value={vf.setor || 'VENDEDOR'} onChange={e => setVf({...vf, setor: e.target.value})} className="p-5 bg-[#0f172a] border border-gray-800 rounded-2xl text-white font-bold uppercase outline-none">
-                      <option value="VENDEDOR">VENDEDOR</option>
-                      <option value="ADMIN">ADMIN</option>
-                    </select>
-                    <input type="number" value={vf.comissao || ''} onChange={e => setVf({...vf, comissao: Number(e.target.value)})} placeholder="% COMISSÃO" className="p-5 bg-[#0f172a] border border-gray-800 rounded-2xl text-white font-bold outline-none" />
-                 </div>
+                <select value={vf.vendedor || ''} onChange={e => setVf({...vf, vendedor: e.target.value})} disabled={!user?.isAdmin} className="w-full p-5 bg-[#0f172a] border border-gray-800 rounded-2xl text-white font-bold uppercase outline-none" required>
+                  <option value="">Vendedor...</option>
+                  {usuarios.map(u => <option key={u.id} value={u.nome}>{u.nome}</option>)}
+                </select>
               </div>
             )}
 
             <div className="flex gap-4 pt-8">
               <button type="button" onClick={() => setModalType(null)} className="flex-1 bg-gray-800 p-6 rounded-[2rem] font-black uppercase text-white hover:bg-gray-700 transition-all">Cancelar</button>
-              <button type="submit" className="flex-1 bg-blue-600 p-6 rounded-[2rem] font-black uppercase text-white shadow-xl shadow-blue-600/20 hover:scale-105 transition-all">Salvar Alterações</button>
+              <button type="submit" className="flex-1 bg-blue-600 p-6 rounded-[2rem] font-black uppercase text-white shadow-xl shadow-blue-600/20 hover:scale-105 transition-all">Salvar</button>
             </div>
           </form>
         </div>
@@ -741,18 +653,14 @@ const App: React.FC = () => {
 
   if (!isAuthenticated) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-[#0b0f1a] relative overflow-hidden">
-        <div className="absolute top-[-20%] left-[-20%] w-[60%] h-[60%] bg-blue-600/10 rounded-full blur-[120px]"></div>
-        <div className="bg-[#111827]/80 backdrop-blur-xl p-12 rounded-[3.5rem] shadow-2xl w-full max-w-md border border-gray-800 text-center animate-in zoom-in-95 duration-700 relative z-10">
-          <div className="w-24 h-24 bg-gradient-to-br from-blue-600 to-indigo-700 rounded-[2rem] mx-auto mb-10 flex items-center justify-center shadow-2xl shadow-blue-500/30 transform rotate-6 hover:rotate-0 transition-transform duration-500">
-            <i className="fas fa-shield-alt text-5xl text-white"></i>
-          </div>
+      <div className="min-h-screen flex items-center justify-center bg-[#0b0f1a]">
+        <div className="bg-[#111827]/80 backdrop-blur-xl p-12 rounded-[3.5rem] shadow-2xl w-full max-w-md border border-gray-800 text-center animate-in zoom-in-95 duration-700">
           <h1 className="text-4xl font-black mb-1 uppercase tracking-tighter text-white font-mono">VM SEGUROS</h1>
           <p className="text-gray-500 text-[10px] mb-12 uppercase font-black tracking-[0.4em]">Elite Cloud CRM</p>
           <div className="space-y-5">
-            <input type="text" placeholder="LOGIN IDENTIFICAÇÃO" className="w-full p-6 rounded-2xl border border-gray-800 bg-[#0f172a] text-white text-sm font-bold transition uppercase outline-none focus:border-blue-500" value={loginForm.username} onChange={e => setLoginForm({...loginForm, username: e.target.value})} />
-            <input type="password" placeholder="CHAVE DE ACESSO" className="w-full p-6 rounded-2xl border border-gray-800 bg-[#0f172a] text-white text-sm font-bold transition outline-none focus:border-blue-500" value={loginForm.password} onChange={e => setLoginForm({...loginForm, password: e.target.value})} onKeyDown={e => e.key === 'Enter' && handleLogin()} />
-            <button onClick={handleLogin} className="w-full bg-blue-600 hover:bg-blue-500 p-6 rounded-[2rem] font-black uppercase transition-all shadow-2xl shadow-blue-600/30 text-white mt-4 active:scale-95">Autenticar Sistema</button>
+            <input type="text" placeholder="LOGIN" className="w-full p-6 rounded-2xl border border-gray-800 bg-[#0f172a] text-white text-sm font-bold uppercase outline-none focus:border-blue-500" value={loginForm.username} onChange={e => setLoginForm({...loginForm, username: e.target.value})} />
+            <input type="password" placeholder="SENHA" className="w-full p-6 rounded-2xl border border-gray-800 bg-[#0f172a] text-white text-sm font-bold outline-none focus:border-blue-500" value={loginForm.password} onChange={e => setLoginForm({...loginForm, password: e.target.value})} onKeyDown={e => e.key === 'Enter' && handleLogin()} />
+            <button onClick={handleLogin} className="w-full bg-blue-600 hover:bg-blue-500 p-6 rounded-[2rem] font-black uppercase transition-all shadow-2xl shadow-blue-600/30 text-white active:scale-95">Autenticar</button>
           </div>
         </div>
       </div>
@@ -770,9 +678,26 @@ const App: React.FC = () => {
         {activeSection === 'vendedores' && <VendedoresView />}
         {activeSection === 'metas' && <MetasView />}
         {activeSection === 'lead-suhai-page' && <LeadSuhaiView />}
-        {activeSection === 'configuracoes' && <Configuracoes />}
+        {activeSection === 'configuracoes' && (
+          <div className="animate-in fade-in duration-500 max-w-4xl mx-auto space-y-10">
+            <div className="flex justify-between items-center">
+              <h2 className="text-4xl font-black uppercase text-gray-300">Ajustes</h2>
+              <button onClick={() => { setModalType('empresa'); setEditingItem(null); }} className="bg-white/5 border border-white/10 px-8 py-3 rounded-2xl font-black text-[11px] uppercase text-white hover:bg-white/10">Nova Seguradora</button>
+            </div>
+            <div className="bg-[#111827] p-10 rounded-[3rem] border border-gray-800">
+              <h3 className="text-xl font-black uppercase text-blue-500 mb-8 tracking-tighter">Empresas Parceiras</h3>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                {empresas.map(emp => (
+                  <div key={emp.id} className="bg-[#0f172a] p-6 rounded-2xl border border-gray-800 flex justify-between items-center group">
+                    <span className="text-sm font-black uppercase text-white">{emp.nome}</span>
+                    <button onClick={async () => { if(confirm("Remover?")) await cloud.apagar('empresas', emp.id!); }} className="text-red-500 opacity-0 group-hover:opacity-100"><i className="fas fa-trash"></i></button>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+        )}
       </div>
-      {aiLead && <AiAssistant lead={aiLead} onClose={() => setAiLead(null)} />}
       <ModalForm />
     </Layout>
   );
