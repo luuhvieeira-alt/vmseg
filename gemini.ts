@@ -1,15 +1,15 @@
-import { GoogleGenAI } from "@google/genai";
+
+import { GoogleGenAI, Type } from "@google/genai";
 
 export const gemini = {
-  // Generates a persuasive sales pitch for a lead
   async gerarPitchVenda(lead: { cliente: string; veiculo: string; info: string }) {
+    // Inicializa dentro da função para garantir que não quebre o app no import
     const apiKey = process.env.API_KEY;
     if (!apiKey) {
       throw new Error("API_KEY_MISSING");
     }
 
-    // Always create a new instance before generating content to ensure the latest API key is used
-    const ai = new GoogleGenAI({ apiKey: apiKey });
+    const ai = new GoogleGenAI({ apiKey });
     
     const prompt = `Analise este lead de seguro e crie um pitch de venda persuasivo e profissional para o WhatsApp. 
     Cliente: ${lead.cliente}
@@ -17,26 +17,29 @@ export const gemini = {
     Contexto: ${lead.info}
     Retorne o texto formatado com emojis adequados e foco em proteção e confiança.`;
 
-    const response = await ai.models.generateContent({
-      model: "gemini-3-flash-preview",
-      contents: prompt,
-      config: {
-        temperature: 0.7,
-        topK: 40,
-        topP: 0.95,
-      }
-    });
+    try {
+      const response = await ai.models.generateContent({
+        model: "gemini-3-flash-preview",
+        contents: prompt,
+        config: {
+          temperature: 0.7,
+          topK: 40,
+          topP: 0.95,
+        }
+      });
 
-    return response.text;
+      return response.text;
+    } catch (error) {
+      console.error("Gemini API Error:", error);
+      throw error;
+    }
   },
 
-  // Suggests a status for a lead based on conversation history
   async sugerirStatus(historico: string) {
     const apiKey = process.env.API_KEY;
     if (!apiKey) return null;
 
-    // Always create a new instance before generating content to ensure the latest API key is used
-    const ai = new GoogleGenAI({ apiKey: apiKey });
+    const ai = new GoogleGenAI({ apiKey });
     
     try {
       const response = await ai.models.generateContent({
