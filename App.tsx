@@ -20,16 +20,13 @@ const App: React.FC = () => {
   const [indicacoes, setIndicacoes] = useState<Indicacao[]>([]);
   const [empresas, setEmpresas] = useState<Empresa[]>([]);
 
-  // Selection State
+  // Selection State for Bulk Actions
   const [selectedVendas, setSelectedVendas] = useState<string[]>([]);
   const [selectedIndicacoes, setSelectedIndicacoes] = useState<string[]>([]);
 
   // Modals
-  const [modalType, setModalType] = useState<'venda' | 'indicacao' | 'usuario' | 'empresa' | null>(null);
+  const [modalType, setModalType] = useState<'venda' | 'indicacao' | 'usuario' | 'empresa' | 'meta' | null>(null);
   const [editingItem, setEditingItem] = useState<any>(null);
-
-  // Drag and Drop State
-  const [draggedItem, setDraggedItem] = useState<{ id: string, type: 'venda' | 'indicacao' } | null>(null);
 
   useEffect(() => {
     const unsubVendas = cloud.subscribeVendas(setVendas);
@@ -56,7 +53,7 @@ const App: React.FC = () => {
       setUser(admin);
       setIsAuthenticated(true);
     } else {
-      const found = usuarios.find(u => u.login === uI && u.senha === pI);
+      const found = usuarios.find(u => (u.login || '').toLowerCase() === uI && u.senha === pI);
       if (found) {
         const authUser: AuthUser = { ...found, isAdmin: found.setor === 'ADMIN' };
         setUser(authUser);
@@ -73,14 +70,59 @@ const App: React.FC = () => {
     setLoginForm({ username: '', password: '' });
   };
 
+  // Funções de Movimentação Rápida
+  const moveVenda = async (item: Venda, direction: 'left' | 'right') => {
+    const currentIndex = VENDA_STATUS_MAP.indexOf(item.status);
+    const nextIndex = direction === 'right' ? currentIndex + 1 : currentIndex - 1;
+    if (nextIndex >= 0 && nextIndex < VENDA_STATUS_MAP.length) {
+      await cloud.updateStatus('vendas', item.id!, VENDA_STATUS_MAP[nextIndex]);
+    }
+  };
+
+  const moveIndicacao = async (item: Indicacao, direction: 'left' | 'right') => {
+    const currentIndex = INDICACAO_STATUS_MAP.indexOf(item.status);
+    const nextIndex = direction === 'right' ? currentIndex + 1 : currentIndex - 1;
+    if (nextIndex >= 0 && nextIndex < INDICACAO_STATUS_MAP.length) {
+      await cloud.updateStatus('indicacoes', item.id!, INDICACAO_STATUS_MAP[nextIndex]);
+    }
+  };
+
+  // Bulk Delete Actions
+  const handleBulkDeleteVendas = async () => {
+    if (window.confirm(`Deseja excluir permanentemente ${selectedVendas.length} registros?`)) {
+      for (const id of selectedVendas) {
+        await cloud.apagar('vendas', id);
+      }
+      setSelectedVendas([]);
+    }
+  };
+
+  const handleBulkDeleteIndicacoes = async () => {
+    if (window.confirm(`Deseja excluir permanentemente ${selectedIndicacoes.length} leads?`)) {
+      for (const id of selectedIndicacoes) {
+        await cloud.apagar('indicacoes', id);
+      }
+      setSelectedIndicacoes([]);
+    }
+  };
+
+  const toggleVendaSelection = (id: string) => {
+    setSelectedVendas(prev => prev.includes(id) ? prev.filter(v => v !== id) : [...prev, id]);
+  };
+
+  const toggleIndicacaoSelection = (id: string) => {
+    setSelectedIndicacoes(prev => prev.includes(id) ? prev.filter(i => i !== id) : [...prev, id]);
+  };
+
+  // Filtros Otimizados
   const filteredVendas = useMemo(() => {
     let list = user?.isAdmin ? vendas : vendas.filter(v => v.vendedor === user?.nome);
     if (searchTerm) {
       const lower = searchTerm.toLowerCase();
       list = list.filter(v => 
-        v.cliente.toLowerCase().includes(lower) || 
-        v.vendedor.toLowerCase().includes(lower) ||
-        v.empresa?.toLowerCase().includes(lower)
+        (v.cliente || '').toLowerCase().includes(lower) || 
+        (v.vendedor || '').toLowerCase().includes(lower) ||
+        (v.empresa || '').toLowerCase().includes(lower)
       );
     }
     return list;
@@ -91,117 +133,102 @@ const App: React.FC = () => {
     if (searchTerm) {
       const lower = searchTerm.toLowerCase();
       list = list.filter(i => 
-        i.cliente.toLowerCase().includes(lower) || 
-        i.veiculo.toLowerCase().includes(lower) ||
-        i.vendedor.toLowerCase().includes(lower)
+        (i.cliente || '').toLowerCase().includes(lower) || 
+        (i.veiculo || '').toLowerCase().includes(lower) ||
+        (i.vendedor || '').toLowerCase().includes(lower)
       );
     }
     return list;
   }, [indicacoes, user, searchTerm]);
 
-  // --- Drag and Drop Logic ---
-  const onDragStart = (e: React.DragEvent, id: string, type: 'venda' | 'indicacao') => {
-    setDraggedItem({ id, type });
-    e.dataTransfer.effectAllowed = 'move';
-  };
-
-  const onDragOver = (e: React.DragEvent) => {
-    e.preventDefault();
-  };
-
-  const onDrop = async (e: React.DragEvent, newStatus: string, type: 'venda' | 'indicacao') => {
-    e.preventDefault();
-    if (!draggedItem || draggedItem.type !== type) return;
-    
-    const collection = draggedItem.type === 'venda' ? 'vendas' : 'indicacoes';
-    try {
-      await cloud.updateStatus(collection, draggedItem.id, newStatus);
-    } catch (err) {
-      console.error("Erro ao atualizar status:", err);
-    }
-    setDraggedItem(null);
-  };
-
-  const toggleSelectVenda = (id: string) => {
-    setSelectedVendas(prev => prev.includes(id) ? prev.filter(i => i !== id) : [...prev, id]);
-  };
-
-  const toggleSelectIndicacao = (id: string) => {
-    setSelectedIndicacoes(prev => prev.includes(id) ? prev.filter(i => i !== id) : [...prev, id]);
-  };
-
-  const bulkDeleteVendas = async () => {
-    if (!selectedVendas.length) return;
-    if (confirm(`Excluir ${selectedVendas.length} registros?`)) {
-      for (const id of selectedVendas) await cloud.apagar('vendas', id);
-      setSelectedVendas([]);
-    }
-  };
-
-  const bulkDeleteIndicacoes = async () => {
-    if (!selectedIndicacoes.length) return;
-    if (confirm(`Excluir ${selectedIndicacoes.length} leads?`)) {
-      for (const id of selectedIndicacoes) await cloud.apagar('indicacoes', id);
-      setSelectedIndicacoes([]);
-    }
-  };
-
   // --- Views ---
 
+  // Dashboard component implemented to display summary metrics and charts
   const Dashboard = () => {
-    const today = new Date().setHours(0, 0, 0, 0);
-    const vHoje = filteredVendas.filter(v => v.dataCriacao >= today);
-    const comissaoHoje = vHoje.reduce((a, b) => a + Number(user?.isAdmin ? (b.comissao_cheia || 0) : (b.comissao_vendedor || 0)), 0);
-    const targets = user?.isAdmin ? usuarios : [user!];
+    const stats = useMemo(() => {
+      const totalLeads = filteredIndicacoes.length;
+      const totalVendas = filteredVendas.length;
+      const vendasPagas = filteredVendas.filter(v => v.status === 'Pagamento Efetuado');
+      const premioTotal = vendasPagas.reduce((acc, v) => acc + (v.valor || 0), 0);
+      const comissaoTotal = vendasPagas.reduce((acc, v) => acc + (user?.isAdmin ? (v.comissao_cheia || 0) : (v.comissao_vendedor || 0)), 0);
+      
+      return { totalLeads, totalVendas, premioTotal, comissaoTotal };
+    }, [filteredIndicacoes, filteredVendas, user]);
 
     return (
       <div className="animate-in fade-in duration-500">
-        <div className="flex justify-between items-end mb-10">
+        <div className="flex justify-between items-center mb-10">
           <div>
-            <h2 className="text-4xl font-black uppercase text-white tracking-tighter">Cockpit</h2>
-            <p className="text-[10px] font-bold text-gray-500 uppercase tracking-widest">Performance Operacional</p>
+            <h2 className="text-4xl font-black uppercase text-white tracking-tighter">Resumo Geral</h2>
+            <p className="text-[10px] font-bold text-gray-500 uppercase tracking-widest">Performance e Métricas em Tempo Real</p>
           </div>
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-8 mb-16">
-          <div className="bg-[#111827] p-8 rounded-[2rem] border border-blue-900/30 shadow-2xl relative overflow-hidden group">
-            <p className="text-gray-500 text-[10px] font-black uppercase mb-1">Vendas (Hoje)</p>
-            <h2 className="text-6xl font-black text-white">{vHoje.length}</h2>
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-12">
+          <div className="bg-[#111827] p-8 rounded-[2.5rem] border border-gray-800 shadow-xl border-l-4 border-l-yellow-500">
+            <p className="text-gray-500 text-[10px] font-black uppercase mb-1">Meus Leads</p>
+            <h3 className="text-4xl font-black text-white">{stats.totalLeads}</h3>
           </div>
-          <div className="bg-[#111827] p-8 rounded-[2rem] border border-green-900/30 shadow-2xl relative overflow-hidden group">
-            <p className="text-gray-500 text-[10px] font-black uppercase mb-1">Comissão (Hoje)</p>
-            <h2 className="text-6xl font-black text-green-500">{FORMAT_BRL(comissaoHoje)}</h2>
+          <div className="bg-[#111827] p-8 rounded-[2.5rem] border border-gray-800 shadow-xl border-l-4 border-l-blue-500">
+            <p className="text-gray-500 text-[10px] font-black uppercase mb-1">Total Vendas</p>
+            <h3 className="text-4xl font-black text-white">{stats.totalVendas}</h3>
           </div>
-          <div className="bg-[#111827] p-8 rounded-[2rem] border border-gray-800 shadow-2xl relative overflow-hidden group">
-            <p className="text-gray-500 text-[10px] font-black uppercase mb-1">Leads Ativos</p>
-            <h2 className="text-6xl font-black text-white">{filteredIndicacoes.length}</h2>
+          <div className="bg-[#111827] p-8 rounded-[2.5rem] border border-gray-800 shadow-xl border-l-4 border-l-white">
+            <p className="text-gray-500 text-[10px] font-black uppercase mb-1">Prêmio Total</p>
+            <h3 className="text-4xl font-black text-white">{FORMAT_BRL(stats.premioTotal)}</h3>
+          </div>
+          <div className="bg-[#111827] p-8 rounded-[2.5rem] border border-gray-800 shadow-xl border-l-4 border-l-green-500">
+            <p className="text-gray-500 text-[10px] font-black uppercase mb-1">Sua Comissão</p>
+            <h3 className="text-4xl font-black text-green-500">{FORMAT_BRL(stats.comissaoTotal)}</h3>
           </div>
         </div>
 
-        <h2 className="text-xl font-black uppercase mb-8 text-white tracking-tighter border-l-4 border-blue-600 pl-4">Metas do Vendedor</h2>
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
-          {targets.map(u => {
-            const meta = metas.find(m => m.vendedor === u.nome) || { meta_salario: 1, meta_premio: 1, meta_qtd: 1 };
-            const userVendas = vendas.filter(v => v.vendedor === u.nome && v.status === 'Pagamento Efetuado');
-            const realC = userVendas.reduce((a, b) => a + Number(b.comissao_vendedor || 0), 0);
-            const pC = Math.min((realC / (meta.meta_salario || 1)) * 100, 100);
-
-            return (
-              <div key={u.id} className="bg-[#111827] p-8 rounded-3xl border border-gray-800 hover:border-blue-500/30 transition-all">
-                <div className="flex justify-between items-center mb-6">
-                  <h4 className="text-[12px] font-black uppercase text-blue-400">{u.nome}</h4>
-                  <span className="text-[10px] font-bold text-gray-600">{pC.toFixed(0)}%</span>
-                </div>
-                <div className="bg-[#1e293b] rounded-full h-3 w-full overflow-hidden shadow-inner">
-                  <div className="bg-gradient-to-r from-blue-600 to-blue-400 h-full transition-all duration-1000" style={{ width: `${pC}%` }}></div>
-                </div>
-                <div className="mt-4 flex justify-between text-[9px] font-black uppercase text-gray-500">
-                  <span>Atual: {FORMAT_BRL(realC)}</span>
-                  <span>Meta: {FORMAT_BRL(meta.meta_salario)}</span>
-                </div>
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+           <div className="bg-[#111827] p-10 rounded-[3rem] border border-gray-800 shadow-2xl">
+              <h3 className="text-xl font-black uppercase text-white mb-8 flex items-center gap-3">
+                <i className="fas fa-chart-line text-blue-500"></i> Funil de Vendas
+              </h3>
+              <div className="space-y-6">
+                {VENDA_STATUS_MAP.map(status => {
+                  const count = filteredVendas.filter(v => v.status === status).length;
+                  const percent = stats.totalVendas > 0 ? (count / stats.totalVendas) * 100 : 0;
+                  return (
+                    <div key={status} className="space-y-2">
+                      <div className="flex justify-between text-[10px] font-black uppercase text-gray-500">
+                        <span>{status}</span>
+                        <span className="text-white">{count} ({percent.toFixed(0)}%)</span>
+                      </div>
+                      <div className="h-2 bg-[#0f172a] rounded-full overflow-hidden border border-gray-800">
+                        <div className="h-full bg-blue-600 shadow-[0_0_10px_rgba(37,99,235,0.5)] transition-all duration-1000" style={{ width: `${percent}%` }}></div>
+                      </div>
+                    </div>
+                  );
+                })}
               </div>
-            );
-          })}
+           </div>
+
+           <div className="bg-[#111827] p-10 rounded-[3rem] border border-gray-800 shadow-2xl">
+              <h3 className="text-xl font-black uppercase text-white mb-8 flex items-center gap-3">
+                <i className="fas fa-bolt text-yellow-500"></i> Status dos Leads
+              </h3>
+              <div className="space-y-6">
+                {INDICACAO_STATUS_MAP.map(status => {
+                  const count = filteredIndicacoes.filter(i => i.status === status).length;
+                  const percent = stats.totalLeads > 0 ? (count / stats.totalLeads) * 100 : 0;
+                  return (
+                    <div key={status} className="space-y-2">
+                      <div className="flex justify-between text-[10px] font-black uppercase text-gray-500">
+                        <span>{status}</span>
+                        <span className="text-white">{count} ({percent.toFixed(0)}%)</span>
+                      </div>
+                      <div className="h-2 bg-[#0f172a] rounded-full overflow-hidden border border-gray-800">
+                        <div className="h-full bg-yellow-500 shadow-[0_0_10px_rgba(234,179,8,0.5)] transition-all duration-1000" style={{ width: `${percent}%` }}></div>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+           </div>
         </div>
       </div>
     );
@@ -212,15 +239,15 @@ const App: React.FC = () => {
       <div className="flex justify-between items-center mb-8">
         <div>
           <h2 className="text-3xl font-black uppercase text-yellow-500 tracking-tighter">Leads</h2>
-          <p className="text-[10px] font-bold text-gray-500 uppercase">Arraste os cartões para mudar o status</p>
+          <p className="text-[10px] font-bold text-gray-500 uppercase">Selecione para excluir ou use as setas para mover</p>
         </div>
         <div className="flex gap-4">
           {selectedIndicacoes.length > 0 && (
-             <button onClick={bulkDeleteIndicacoes} className="bg-red-600/20 text-red-500 border border-red-600/30 px-6 py-3 rounded-2xl font-black text-[11px] uppercase transition-all hover:bg-red-600 hover:text-white">
-                <i className="fas fa-trash-alt mr-2"></i> Excluir ({selectedIndicacoes.length})
-             </button>
+            <button onClick={handleBulkDeleteIndicacoes} className="bg-red-600/20 text-red-500 border border-red-600/30 px-6 py-3 rounded-2xl font-black text-[11px] uppercase hover:bg-red-600 hover:text-white transition-all">
+              Excluir Selecionados ({selectedIndicacoes.length})
+            </button>
           )}
-          <button onClick={() => { setModalType('indicacao'); setEditingItem(null); }} className="bg-yellow-500 hover:bg-yellow-400 px-8 py-3 rounded-2xl font-black text-[11px] uppercase text-black transition-all shadow-lg shadow-yellow-500/20">Novo Lead</button>
+          <button onClick={() => { setModalType('indicacao'); setEditingItem(null); }} className="bg-yellow-500 px-8 py-3 rounded-2xl font-black text-[11px] uppercase text-black">Novo Lead</button>
         </div>
       </div>
       
@@ -228,7 +255,7 @@ const App: React.FC = () => {
         <i className="fas fa-search absolute left-4 top-1/2 -translate-y-1/2 text-gray-500"></i>
         <input 
           type="text" 
-          placeholder="BUSCAR POR NOME, VEÍCULO OU VENDEDOR..." 
+          placeholder="PESQUISAR LEADS..." 
           className="w-full bg-[#111827] border border-gray-800 rounded-2xl py-4 pl-12 pr-4 text-xs font-bold text-white outline-none focus:border-yellow-500 transition-all uppercase"
           value={searchTerm}
           onChange={(e) => setSearchTerm(e.target.value)}
@@ -237,33 +264,29 @@ const App: React.FC = () => {
 
       <div className="flex-1 flex gap-6 overflow-x-auto pb-6 scrollbar-thin">
         {INDICACAO_STATUS_MAP.map(status => (
-          <div 
-            key={status} 
-            onDragOver={onDragOver}
-            onDrop={(e) => onDrop(e, status, 'indicacao')}
-            className={`kanban-column rounded-[2.5rem] p-5 border flex flex-col transition-all duration-300 ${draggedItem?.type === 'indicacao' ? 'bg-yellow-500/5 border-yellow-500/40 shadow-2xl' : 'bg-[#0f172a] border-gray-800'}`}
-          >
+          <div key={status} className="kanban-column bg-[#0f172a] rounded-[2.5rem] p-5 border border-gray-800 flex flex-col">
             <h3 className="text-[10px] font-black uppercase text-gray-500 mb-6 text-center tracking-[0.2em]">{status}</h3>
             <div className="flex-1 space-y-4 overflow-y-auto pr-2 scrollbar-thin">
               {filteredIndicacoes.filter(i => i.status === status).map(i => (
-                <div 
-                  key={i.id} 
-                  draggable
-                  onDragStart={(e) => onDragStart(e, i.id!, 'indicacao')}
-                  onClick={() => { setModalType('indicacao'); setEditingItem(i); }} 
-                  className="group bg-[#111827] border border-gray-800 p-6 rounded-[2rem] border-l-4 border-l-yellow-500 hover:scale-[1.02] transition-all cursor-grab active:cursor-grabbing shadow-xl relative"
-                >
-                   <div className="absolute top-4 left-4" onClick={(e) => e.stopPropagation()}>
-                      <input type="checkbox" checked={selectedIndicacoes.includes(i.id!)} onChange={() => toggleSelectIndicacao(i.id!)} className="w-4 h-4 rounded accent-yellow-500" />
-                   </div>
-                   <div className="absolute top-4 right-4">
-                      <div className="text-red-500 opacity-0 group-hover:opacity-100 transition-opacity cursor-pointer" onClick={async (e) => { e.stopPropagation(); if(confirm("Deseja excluir este lead?")) await cloud.apagar('indicacoes', i.id!); }}><i className="fas fa-trash"></i></div>
-                   </div>
-                  <h4 className="text-[12px] font-black uppercase text-white mb-1 mt-4">{i.cliente}</h4>
-                  <p className="text-[10px] text-gray-500 font-bold uppercase mb-4">{i.veiculo}</p>
-                  <div className="flex justify-between items-center">
-                    <span className="text-[11px] text-blue-400 font-black"><i className="fab fa-whatsapp mr-1 text-green-500"></i> {i.tel}</span>
-                    {i.suhai && <span className="s-suhai-pulse text-[12px]">S</span>}
+                <div key={i.id} className="group bg-[#111827] border border-gray-800 p-6 rounded-[2rem] border-l-4 border-l-yellow-500 hover:scale-[1.02] transition-all shadow-xl relative">
+                  <div className="absolute top-4 left-4">
+                    <input 
+                      type="checkbox" 
+                      checked={selectedIndicacoes.includes(i.id!)}
+                      onChange={() => toggleIndicacaoSelection(i.id!)}
+                      className="w-4 h-4 rounded accent-yellow-500 cursor-pointer"
+                    />
+                  </div>
+                  <div className="flex justify-between items-start mb-2 ml-6">
+                    <h4 onClick={() => { setModalType('indicacao'); setEditingItem(i); }} className="text-[12px] font-black uppercase text-white cursor-pointer hover:text-yellow-500">{i.cliente}</h4>
+                    <button onClick={async () => { if(confirm("Excluir?")) await cloud.apagar('indicacoes', i.id!); }} className="text-red-500/30 hover:text-red-500"><i className="fas fa-trash text-[10px]"></i></button>
+                  </div>
+                  <p className="text-[10px] text-gray-500 font-bold uppercase mb-4 ml-6">{i.veiculo}</p>
+                  
+                  <div className="flex justify-between items-center pt-3 border-t border-gray-800">
+                    <button disabled={INDICACAO_STATUS_MAP.indexOf(i.status) === 0} onClick={() => moveIndicacao(i, 'left')} className="w-8 h-8 rounded-full bg-gray-800 flex items-center justify-center text-gray-400 hover:bg-yellow-500 hover:text-black disabled:opacity-0 transition-all"><i className="fas fa-chevron-left text-[10px]"></i></button>
+                    <span className="text-[8px] font-black uppercase text-gray-600">{i.vendedor}</span>
+                    <button disabled={INDICACAO_STATUS_MAP.indexOf(i.status) === INDICACAO_STATUS_MAP.length - 1} onClick={() => moveIndicacao(i, 'right')} className="w-8 h-8 rounded-full bg-gray-800 flex items-center justify-center text-gray-400 hover:bg-yellow-500 hover:text-black disabled:opacity-0 transition-all"><i className="fas fa-chevron-right text-[10px]"></i></button>
                   </div>
                 </div>
               ))}
@@ -279,15 +302,15 @@ const App: React.FC = () => {
       <div className="flex justify-between items-center mb-8">
         <div>
           <h2 className="text-3xl font-black uppercase text-blue-500 tracking-tighter">Produção</h2>
-          <p className="text-[10px] font-bold text-gray-500 uppercase">Movimente livremente entre as colunas</p>
+          <p className="text-[10px] font-bold text-gray-500 uppercase">Gestão completa de apólices e comissões</p>
         </div>
         <div className="flex gap-4">
           {selectedVendas.length > 0 && (
-             <button onClick={bulkDeleteVendas} className="bg-red-600/20 text-red-500 border border-red-600/30 px-6 py-3 rounded-2xl font-black text-[11px] uppercase transition-all hover:bg-red-600 hover:text-white">
-                <i className="fas fa-trash-alt mr-2"></i> Excluir ({selectedVendas.length})
-             </button>
+            <button onClick={handleBulkDeleteVendas} className="bg-red-600/20 text-red-500 border border-red-600/30 px-6 py-3 rounded-2xl font-black text-[11px] uppercase hover:bg-red-600 hover:text-white transition-all">
+              Excluir Selecionados ({selectedVendas.length})
+            </button>
           )}
-          <button onClick={() => { setModalType('venda'); setEditingItem(null); }} className="bg-blue-600 hover:bg-blue-500 px-8 py-3 rounded-2xl font-black text-[11px] uppercase text-white transition-all shadow-lg shadow-blue-500/20">Lançar Venda</button>
+          <button onClick={() => { setModalType('venda'); setEditingItem(null); }} className="bg-blue-600 px-8 py-3 rounded-2xl font-black text-[11px] uppercase text-white shadow-lg shadow-blue-500/20">Lançar Venda</button>
         </div>
       </div>
 
@@ -295,7 +318,7 @@ const App: React.FC = () => {
         <i className="fas fa-search absolute left-4 top-1/2 -translate-y-1/2 text-gray-500"></i>
         <input 
           type="text" 
-          placeholder="BUSCAR CLIENTE, EMPRESA OU VENDEDOR..." 
+          placeholder="PESQUISAR CLIENTE, SEGURADORA OU VENDEDOR..." 
           className="w-full bg-[#111827] border border-gray-800 rounded-2xl py-4 pl-12 pr-4 text-xs font-bold text-white outline-none focus:border-blue-500 transition-all uppercase"
           value={searchTerm}
           onChange={(e) => setSearchTerm(e.target.value)}
@@ -304,55 +327,54 @@ const App: React.FC = () => {
 
       <div className="flex-1 flex gap-6 overflow-x-auto pb-6 scrollbar-thin">
         {VENDA_STATUS_MAP.map(status => (
-          <div 
-            key={status} 
-            onDragOver={onDragOver}
-            onDrop={(e) => onDrop(e, status, 'venda')}
-            className={`kanban-column rounded-[2.5rem] p-5 border flex flex-col transition-all duration-300 ${draggedItem?.type === 'venda' ? 'bg-blue-600/5 border-blue-600/40 shadow-2xl' : 'bg-[#0f172a] border-gray-800'}`}
-          >
+          <div key={status} className="kanban-column bg-[#0f172a] rounded-[2.5rem] p-5 border border-gray-800 flex flex-col">
             <h3 className="text-[10px] font-black uppercase text-gray-500 mb-6 text-center tracking-[0.2em]">{status}</h3>
             <div className="flex-1 space-y-4 overflow-y-auto pr-2 scrollbar-thin">
               {filteredVendas.filter(v => v.status === status).map(v => (
-                <div 
-                  key={v.id} 
-                  draggable
-                  onDragStart={(e) => onDragStart(e, v.id!, 'venda')}
-                  onClick={() => { setModalType('venda'); setEditingItem(v); }} 
-                  className="group bg-[#111827] border border-gray-800 p-6 rounded-[2rem] border-l-4 border-l-blue-600 hover:scale-[1.02] transition-all cursor-grab active:cursor-grabbing shadow-xl relative"
-                >
-                  <div className="absolute top-4 left-4" onClick={(e) => e.stopPropagation()}>
-                      <input type="checkbox" checked={selectedVendas.includes(v.id!)} onChange={() => toggleSelectVenda(v.id!)} className="w-4 h-4 rounded accent-blue-500" />
-                   </div>
-                   <div className="absolute top-4 right-4">
-                      <div className="text-red-500 opacity-0 group-hover:opacity-100 transition-opacity cursor-pointer" onClick={async (e) => { e.stopPropagation(); if(confirm("Deseja excluir este registro?")) await cloud.apagar('vendas', v.id!); }}><i className="fas fa-trash"></i></div>
-                   </div>
-                  <div className="flex justify-between items-start mb-1 mt-4">
-                    <h4 className="text-[12px] font-black uppercase text-white leading-tight pr-4">{v.cliente}</h4>
-                    {v.suhai && <i className="fas fa-star text-green-500 text-[10px]"></i>}
+                <div key={v.id} className="group bg-[#111827] border border-gray-800 p-5 rounded-[2.5rem] border-l-4 border-l-blue-600 hover:scale-[1.01] transition-all shadow-xl relative">
+                  <div className="absolute top-4 left-4">
+                    <input 
+                      type="checkbox" 
+                      checked={selectedVendas.includes(v.id!)}
+                      onChange={() => toggleVendaSelection(v.id!)}
+                      className="w-4 h-4 rounded accent-blue-500 cursor-pointer"
+                    />
                   </div>
-                  <p className="text-[10px] text-blue-500 font-black mb-1"><i className="fab fa-whatsapp mr-1"></i>{v.tel}</p>
-                  <p className="text-[9px] text-gray-500 font-black uppercase mb-4 border-b border-gray-800 pb-2">{v.empresa || 'Sem Empresa'}</p>
+                  <div className="flex justify-between items-start mb-1 ml-6">
+                    <h4 onClick={() => { setModalType('venda'); setEditingItem(v); }} className="text-[13px] font-black uppercase text-white cursor-pointer hover:text-blue-500 leading-tight">{v.cliente}</h4>
+                    {v.suhai && <i className="fas fa-star text-green-500 text-[10px] s-suhai-pulse"></i>}
+                  </div>
                   
-                  <div className="bg-[#0f172a] p-4 rounded-2xl mb-4 border border-gray-800 text-center shadow-inner">
-                    <p className="text-[8px] text-gray-500 font-black uppercase mb-1 tracking-widest">Prêmio Total</p>
+                  {/* Telefone logo abaixo do nome */}
+                  <p className="text-[10px] text-blue-400 font-bold mb-1 ml-6 flex items-center gap-1">
+                    <i className="fab fa-whatsapp"></i> {v.tel}
+                  </p>
+                  
+                  <p className="text-[9px] text-gray-500 font-black uppercase mb-3 ml-6">{v.empresa || 'Sem Seguradora'}</p>
+                  
+                  <div className="bg-[#0f172a] p-4 rounded-2xl mb-3 border border-gray-800 text-center shadow-inner">
+                    <p className="text-[8px] text-gray-500 font-black uppercase mb-1 tracking-widest">Prêmio Líquido</p>
                     <p className="text-[16px] font-black text-white">{FORMAT_BRL(v.valor)}</p>
                   </div>
 
+                  {/* Caixinhas de Comissões solicitadas */}
                   <div className="grid grid-cols-2 gap-3 mb-4">
-                    <div className="bg-[#0f172a] p-3 rounded-xl border border-gray-800 text-center">
-                      <p className="text-[7px] font-black text-blue-500 uppercase mb-1">C. Cheia</p>
-                      <p className="text-[11px] font-bold text-gray-400">{FORMAT_BRL(v.comissao_cheia)}</p>
+                    <div className="bg-gray-900/50 p-3 rounded-xl border border-gray-800 text-center">
+                      <p className="text-[7px] font-black text-gray-500 uppercase mb-1">C. Cheia</p>
+                      <p className="text-[10px] font-bold text-gray-300">{FORMAT_BRL(v.comissao_cheia)}</p>
                     </div>
                     <div className="bg-green-500/5 p-3 rounded-xl border border-green-500/20 text-center">
-                      <p className="text-[7px] font-black text-green-500 uppercase mb-1">C. Vend.</p>
-                      <p className="text-[11px] font-bold text-green-400">{FORMAT_BRL(v.comissao_vendedor)}</p>
+                      <p className="text-[7px] font-black text-green-500 uppercase mb-1">Sua Parte</p>
+                      <p className="text-[10px] font-black text-green-400">{FORMAT_BRL(v.comissao_vendedor)}</p>
                     </div>
                   </div>
 
-                  {/* VENDEDOR NA BASE DO CARD */}
-                  <div className="pt-3 border-t border-gray-800 flex justify-between items-center">
-                    <span className="text-[8px] font-black uppercase text-gray-500 tracking-wider">Vendedor</span>
-                    <span className="text-[10px] font-black uppercase text-blue-400">{v.vendedor}</span>
+                  <div className="flex justify-between items-center pt-2 border-t border-gray-800">
+                    <button disabled={VENDA_STATUS_MAP.indexOf(v.status) === 0} onClick={() => moveVenda(v, 'left')} className="w-8 h-8 rounded-full bg-gray-800 flex items-center justify-center text-gray-400 hover:bg-blue-600 hover:text-white disabled:opacity-0 transition-all"><i className="fas fa-chevron-left text-[10px]"></i></button>
+                    <div className="text-center">
+                       <p className="text-[9px] text-blue-400 font-black uppercase">{v.vendedor}</p>
+                    </div>
+                    <button disabled={VENDA_STATUS_MAP.indexOf(v.status) === VENDA_STATUS_MAP.length - 1} onClick={() => moveVenda(v, 'right')} className="w-8 h-8 rounded-full bg-gray-800 flex items-center justify-center text-gray-400 hover:bg-blue-600 hover:text-white disabled:opacity-0 transition-all"><i className="fas fa-chevron-right text-[10px]"></i></button>
                   </div>
                 </div>
               ))}
@@ -363,6 +385,52 @@ const App: React.FC = () => {
     </div>
   );
 
+  const LeadSuhaiView = () => {
+    const suhaiRecords = filteredVendas.filter(v => v.suhai && v.status === 'Pagamento Efetuado');
+    const totalComissao = suhaiRecords.reduce((acc, v) => acc + (user?.isAdmin ? (v.comissao_cheia || 0) : (v.comissao_vendedor || 0)), 0);
+    const totalPremio = suhaiRecords.reduce((acc, v) => acc + (v.valor || 0), 0);
+
+    return (
+      <div className="animate-in fade-in duration-500">
+        <h2 className="text-4xl font-black uppercase text-green-500 mb-10 tracking-tighter">Suhai Gold - Pagos</h2>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-8 mb-10">
+           <div className="bg-[#111827] p-8 rounded-[2rem] border border-green-500/30 shadow-2xl">
+              <p className="text-gray-500 text-[10px] font-black uppercase mb-1">Comissão Suhai</p>
+              <h2 className="text-5xl font-black text-green-500">{FORMAT_BRL(totalComissao)}</h2>
+           </div>
+           <div className="bg-[#111827] p-8 rounded-[2rem] border border-blue-500/30 shadow-2xl">
+              <p className="text-gray-500 text-[10px] font-black uppercase mb-1">Prêmio Total</p>
+              <h2 className="text-5xl font-black text-blue-500">{FORMAT_BRL(totalPremio)}</h2>
+           </div>
+        </div>
+        <div className="bg-[#111827] rounded-[2.5rem] border border-gray-800 overflow-hidden shadow-2xl">
+           <table className="w-full text-left">
+              <thead className="bg-[#0f172a] text-gray-400 text-[10px] uppercase font-black">
+                 <tr>
+                    <th className="p-6">Vendedor</th>
+                    <th className="p-6">Cliente</th>
+                    <th className="p-6">Prêmio</th>
+                    <th className="p-6">Comissão</th>
+                    <th className="p-6 text-center">Status</th>
+                 </tr>
+              </thead>
+              <tbody className="text-xs font-bold uppercase">
+                 {suhaiRecords.map(v => (
+                    <tr key={v.id} className="border-b border-gray-800 hover:bg-gray-800/20">
+                       <td className="p-6 text-blue-400">{v.vendedor}</td>
+                       <td className="p-6 text-white">{v.cliente}</td>
+                       <td className="p-6 text-gray-400">{FORMAT_BRL(v.valor)}</td>
+                       <td className="p-6 text-green-500 font-black">{FORMAT_BRL(user?.isAdmin ? v.comissao_cheia : v.comissao_vendedor)}</td>
+                       <td className="p-6 text-center"><span className="text-[9px] bg-green-500/10 text-green-500 px-3 py-1 rounded-full">PAGO</span></td>
+                    </tr>
+                 ))}
+              </tbody>
+           </table>
+        </div>
+      </div>
+    );
+  };
+
   const Financeiro = () => {
     const concluido = filteredVendas.filter(v => v.status === 'Pagamento Efetuado');
     const totalComissao = concluido.reduce((a, b) => a + Number(user?.isAdmin ? (b.comissao_cheia || 0) : (b.comissao_vendedor || 0)), 0);
@@ -370,10 +438,9 @@ const App: React.FC = () => {
     return (
       <div className="animate-in fade-in duration-500">
         <h2 className="text-4xl font-black uppercase text-green-500 mb-10 tracking-tighter">Financeiro</h2>
-        <div className="bg-[#111827] p-12 rounded-[3rem] border border-green-900/30 text-center mb-10 shadow-2xl relative overflow-hidden">
-          <div className="absolute top-0 left-0 w-full h-1 bg-green-500"></div>
-          <p className="text-gray-500 text-[11px] font-black uppercase mb-2 tracking-[0.3em]">Total Sua Parte (Vendas Pagas)</p>
-          <h2 className="text-7xl font-black text-green-500 tracking-tighter">{FORMAT_BRL(totalComissao)}</h2>
+        <div className="bg-[#111827] p-12 rounded-[3rem] border border-green-900/30 text-center mb-10 shadow-2xl">
+          <p className="text-gray-500 text-[11px] font-black uppercase mb-2">Total Sua Parte (Vendas Pagas)</p>
+          <h2 className="text-7xl font-black text-green-500">{FORMAT_BRL(totalComissao)}</h2>
         </div>
         <div className="bg-[#111827] rounded-[2rem] border border-gray-800 overflow-hidden shadow-xl">
           <table className="w-full text-left">
@@ -382,22 +449,16 @@ const App: React.FC = () => {
                 <th className="p-6">Data</th>
                 <th className="p-6">Cliente</th>
                 <th className="p-6">Prêmio</th>
-                <th className="p-6">Sua Parte / Vendedor</th>
+                <th className="p-6">Comissão</th>
               </tr>
             </thead>
             <tbody className="text-xs font-bold uppercase">
               {concluido.map(v => (
-                <tr key={v.id} className="border-b border-gray-800 hover:bg-gray-800/20 transition-colors">
-                  <td className="p-6 text-gray-500 font-mono">{new Date(v.dataCriacao).toLocaleDateString()}</td>
-                  <td className="p-6 text-white">
-                    <div>{v.cliente}</div>
-                    <div className="text-[9px] text-gray-500">{v.empresa || 'Empresa não definida'}</div>
-                  </td>
+                <tr key={v.id} className="border-b border-gray-800 hover:bg-gray-800/20">
+                  <td className="p-6 text-gray-500">{new Date(v.dataCriacao || 0).toLocaleDateString()}</td>
+                  <td className="p-6 text-white">{v.cliente}</td>
                   <td className="p-6 text-gray-400">{FORMAT_BRL(v.valor)}</td>
-                  <td className="p-6 font-black">
-                    <span className="text-green-500">{FORMAT_BRL(user?.isAdmin ? v.comissao_cheia : v.comissao_vendedor)}</span>
-                    <span className="ml-4 text-[10px] text-green-600/60 font-black">({v.vendedor})</span>
-                  </td>
+                  <td className="p-6 font-black text-green-500">{FORMAT_BRL(user?.isAdmin ? v.comissao_cheia : v.comissao_vendedor)}</td>
                 </tr>
               ))}
             </tbody>
@@ -407,172 +468,104 @@ const App: React.FC = () => {
     );
   };
 
-  const DistribuirLeads = () => {
-    const [f, setF] = useState({ cliente: '', tel: '', veiculo: '', vendedor: '', suhai: false, info: '' });
-    const send = async (e: React.FormEvent) => {
-      e.preventDefault();
-      await cloud.salvarIndicacao({ ...f, status: 'NOVA INDICAÇÃO', dataCriacao: Date.now() } as any);
-      alert('Lead distribuído com sucesso!');
-      setF({ cliente: '', tel: '', veiculo: '', vendedor: '', suhai: false, info: '' });
-    };
-    return (
-      <div className="max-w-2xl mx-auto animate-in zoom-in-95 duration-500">
-        <div className="bg-[#111827] p-12 rounded-[3rem] border border-gray-800 shadow-2xl">
-          <h2 className="text-2xl font-black uppercase text-yellow-500 mb-10 text-center tracking-tighter">Direcionar Oportunidade</h2>
-          <form onSubmit={send} className="space-y-5">
-            <input value={f.cliente} onChange={e => setF({...f, cliente: e.target.value})} placeholder="NOME DO CLIENTE" className="w-full p-5 bg-[#0f172a] border border-gray-800 rounded-2xl text-white uppercase font-bold outline-none focus:border-blue-500" required />
-            <input value={f.tel} onChange={e => setF({...f, tel: e.target.value})} placeholder="WHATSAPP (DDD + NÚMERO)" className="w-full p-5 bg-[#0f172a] border border-gray-800 rounded-2xl text-white font-bold outline-none focus:border-blue-500" required />
-            <input value={f.veiculo} onChange={e => setF({...f, veiculo: e.target.value})} placeholder="MODELO DO VEÍCULO" className="w-full p-5 bg-[#0f172a] border border-gray-800 rounded-2xl text-white uppercase font-bold outline-none focus:border-blue-500" required />
-            <select value={f.vendedor} onChange={e => setF({...f, vendedor: e.target.value})} className="w-full p-5 bg-[#0f172a] border border-gray-800 rounded-2xl text-white uppercase font-bold outline-none" required>
-              <option value="">Vendedor Responsável...</option>
-              {usuarios.map(u => <option key={u.id} value={u.nome}>{u.nome}</option>)}
-            </select>
-            <textarea value={f.info} onChange={e => setF({...f, info: e.target.value})} placeholder="OBSERVAÇÕES ADICIONAIS" className="w-full p-5 bg-[#0f172a] border border-gray-800 rounded-2xl text-white uppercase font-bold h-32 outline-none"></textarea>
-            <div className="flex items-center gap-4 p-5 bg-[#0f172a] border border-gray-800 rounded-2xl">
-              <input type="checkbox" checked={f.suhai} onChange={e => setF({...f, suhai: e.target.checked})} className="w-6 h-6 accent-green-500" id="suhai-check" />
-              <label htmlFor="suhai-check" className="text-[11px] font-black uppercase text-green-500 cursor-pointer">Marcar como Lead Suhai</label>
-            </div>
-            <button type="submit" className="w-full bg-yellow-500 p-6 rounded-[2rem] font-black uppercase text-black transition-all hover:scale-105 active:scale-95 shadow-xl shadow-yellow-500/20">Distribuir Lead Agora</button>
-          </form>
-        </div>
+  const FormLead = () => (
+    <div className="max-w-2xl mx-auto animate-in zoom-in-95 duration-500">
+      <div className="bg-[#111827] p-12 rounded-[3rem] border border-gray-800 shadow-2xl">
+        <h2 className="text-2xl font-black uppercase text-yellow-500 mb-10 text-center">Distribuir Lead</h2>
+        <form onSubmit={async (e) => {
+          e.preventDefault();
+          const f = (e.target as any);
+          await cloud.salvarIndicacao({
+            cliente: f.cliente.value,
+            tel: f.tel.value,
+            veiculo: f.veiculo.value,
+            vendedor: f.vendedor.value,
+            suhai: f.suhai.checked,
+            status: 'NOVA INDICAÇÃO',
+            info: f.info.value,
+            dataCriacao: Date.now()
+          } as any);
+          alert('Lead enviado!');
+          f.reset();
+        }} className="space-y-5">
+          <input name="cliente" placeholder="NOME DO CLIENTE" className="w-full p-5 bg-[#0f172a] border border-gray-800 rounded-2xl text-white font-bold outline-none uppercase focus:border-blue-500" required />
+          <input name="tel" placeholder="WHATSAPP" className="w-full p-5 bg-[#0f172a] border border-gray-800 rounded-2xl text-white font-bold outline-none focus:border-blue-500" required />
+          <input name="veiculo" placeholder="VEÍCULO" className="w-full p-5 bg-[#0f172a] border border-gray-800 rounded-2xl text-white font-bold outline-none uppercase focus:border-blue-500" required />
+          <select name="vendedor" className="w-full p-5 bg-[#0f172a] border border-gray-800 rounded-2xl text-white font-bold outline-none uppercase" required>
+             {usuarios.map(u => <option key={u.id} value={u.nome}>{u.nome}</option>)}
+          </select>
+          <textarea name="info" placeholder="NOTAS ADICIONAIS" className="w-full p-5 bg-[#0f172a] border border-gray-800 rounded-2xl text-white font-bold outline-none h-32 uppercase"></textarea>
+          <div className="flex items-center gap-4">
+            <input type="checkbox" name="suhai" className="w-6 h-6 accent-green-500" />
+            <label className="text-xs font-black uppercase text-green-500">Marcar como Suhai Gold</label>
+          </div>
+          <button type="submit" className="w-full bg-yellow-500 p-6 rounded-[2rem] font-black uppercase text-black hover:scale-105 transition-all shadow-xl">Confirmar Envio</button>
+        </form>
       </div>
-    );
-  };
+    </div>
+  );
 
   const VendedoresView = () => (
     <div className="animate-in fade-in duration-500">
       <div className="flex justify-between items-center mb-10">
-        <h2 className="text-4xl font-black uppercase text-red-500 tracking-tighter">Equipe</h2>
-        <button onClick={() => { setModalType('usuario'); setEditingItem(null); }} className="bg-red-600 hover:bg-red-500 px-8 py-3 rounded-2xl font-black text-[11px] uppercase text-white transition-all shadow-lg shadow-red-500/20">Novo Usuário</button>
+        <h2 className="text-4xl font-black uppercase text-red-500">Equipe</h2>
+        <button onClick={() => { setModalType('usuario'); setEditingItem(null); }} className="bg-red-600 px-8 py-3 rounded-2xl font-black text-[11px] uppercase text-white">Novo Usuário</button>
       </div>
       <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
         {usuarios.map(u => (
-          <div key={u.id} onClick={() => { setModalType('usuario'); setEditingItem(u); }} className="bg-[#111827] p-8 rounded-[2.5rem] border border-gray-800 border-l-8 border-l-red-600 hover:scale-[1.03] transition-all cursor-pointer shadow-xl relative overflow-hidden">
-            <div className="absolute top-4 right-4 text-red-500/20 text-3xl"><i className="fas fa-user-tie"></i></div>
+          <div key={u.id} onClick={() => { setModalType('usuario'); setEditingItem(u); }} className="bg-[#111827] p-8 rounded-[2.5rem] border border-gray-800 border-l-8 border-l-red-600 hover:scale-[1.03] transition-all cursor-pointer shadow-xl">
             <h4 className="text-[14px] font-black uppercase text-white mb-2">{u.nome}</h4>
-            <div className="space-y-1">
-              <p className="text-[10px] text-gray-500 uppercase font-black">Setor: <span className="text-gray-300">{u.setor}</span></p>
-              <p className="text-[10px] text-gray-500 uppercase font-black">Login: <span className="text-gray-300">{u.login}</span></p>
-              <div className="mt-4 inline-block bg-red-600/10 text-red-500 px-3 py-1 rounded-lg text-[11px] font-black">{u.comissao}% Comissão</div>
-            </div>
+            <p className="text-[10px] text-gray-500 uppercase font-black">Setor: {u.setor}</p>
+            <div className="mt-4 inline-block bg-red-600/10 text-red-500 px-3 py-1 rounded-lg text-[11px] font-black">{u.comissao}% Comissão</div>
           </div>
         ))}
       </div>
     </div>
   );
 
-  const MetasView = () => {
-    const [sel, setSel] = useState('');
-    const [mf, setMf] = useState({ salario: 0, premio: 0, qtd: 0 });
-    
-    useEffect(() => {
-       if (sel) {
-          const current = metas.find(m => m.vendedor === sel);
-          if (current) setMf({ salario: current.meta_salario, premio: current.meta_premio, qtd: current.meta_qtd });
-          else setMf({ salario: 0, premio: 0, qtd: 0 });
-       }
-    }, [sel, metas]);
+  const MetasView = () => (
+    <div className="animate-in fade-in duration-500">
+      <div className="flex justify-between items-center mb-10">
+        <h2 className="text-4xl font-black uppercase text-blue-400">Metas</h2>
+      </div>
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
+        {usuarios.map(u => {
+           const existingMeta = metas.find(m => m.vendedor === u.nome);
+           const displayMeta = existingMeta || { meta_salario: 0, meta_premio: 0, meta_qtd: 0 };
+           return (
+             <div key={u.id} onClick={() => { setModalType('meta'); setEditingItem(existingMeta ? existingMeta : { vendedor: u.nome }); }} className="bg-[#111827] p-8 rounded-[2.5rem] border border-gray-800 hover:border-blue-500 transition-all cursor-pointer shadow-xl">
+               <h4 className="text-[14px] font-black uppercase text-blue-400 mb-6">{u.nome}</h4>
+               <div className="space-y-4">
+                 <div className="flex justify-between text-[10px] font-black uppercase text-gray-500"><span>Meta Salarial</span><span className="text-white">{FORMAT_BRL(displayMeta.meta_salario)}</span></div>
+                 <div className="flex justify-between text-[10px] font-black uppercase text-gray-500"><span>Meta Prêmio</span><span className="text-white">{FORMAT_BRL(displayMeta.meta_premio)}</span></div>
+                 <div className="flex justify-between text-[10px] font-black uppercase text-gray-500"><span>Quantidade</span><span className="text-white">{displayMeta.meta_qtd}</span></div>
+               </div>
+             </div>
+           );
+        })}
+      </div>
+    </div>
+  );
 
-    const save = async () => {
-       if(!sel) return alert("Selecione um vendedor");
-       await cloud.salvarMeta({ vendedor: sel, meta_salario: mf.salario, meta_premio: mf.premio, meta_qtd: mf.qtd });
-       alert('Metas atualizadas!');
-    };
-    return (
-      <div className="max-w-2xl mx-auto animate-in slide-in-from-bottom-6 duration-500">
-        <div className="bg-[#111827] p-12 rounded-[3rem] border border-gray-800 shadow-2xl text-center">
-          <i className="fas fa-bullseye text-5xl text-blue-500 mb-8"></i>
-          <h2 className="text-3xl font-black uppercase text-white mb-10 tracking-tighter">Gestão de Metas</h2>
-          <div className="space-y-6 text-left">
-            <label className="text-[10px] font-black text-gray-500 uppercase ml-2">Integrando Performance</label>
-            <select value={sel} onChange={e => setSel(e.target.value)} className="w-full p-5 bg-[#0f172a] border border-gray-800 rounded-2xl text-white font-bold outline-none uppercase">
-              <option value="">Escolher colaborador...</option>
-              {usuarios.map(u => <option key={u.id} value={u.nome}>{u.nome}</option>)}
-            </select>
-            
-            <div className="space-y-4">
-              <div className="bg-[#0f172a] p-5 rounded-2xl border border-gray-800">
-                <label className="text-[10px] font-black text-blue-400 uppercase mb-2 block">Meta Salário / Renda (R$)</label>
-                <input type="number" value={mf.salario} placeholder="0,00" onChange={e => setMf({...mf, salario: Number(e.target.value)})} className="w-full bg-transparent border-none text-white text-xl outline-none font-mono" />
-              </div>
-              <div className="bg-[#0f172a] p-5 rounded-2xl border border-gray-800">
-                <label className="text-[10px] font-black text-green-400 uppercase mb-2 block">Meta Prêmio Líquido (R$)</label>
-                <input type="number" value={mf.premio} placeholder="0,00" onChange={e => setMf({...mf, premio: Number(e.target.value)})} className="w-full bg-transparent border-none text-white text-xl outline-none font-mono" />
-              </div>
-              <div className="bg-[#0f172a] p-5 rounded-2xl border border-gray-800">
-                <label className="text-[10px] font-black text-yellow-500 uppercase mb-2 block">Meta Quantidade Vendas</label>
-                <input type="number" value={mf.qtd} placeholder="0" onChange={e => setMf({...mf, qtd: Number(e.target.value)})} className="w-full bg-transparent border-none text-white text-xl outline-none font-mono" />
-              </div>
+  const ConfiguracoesView = () => (
+    <div className="animate-in fade-in duration-500 max-w-4xl mx-auto space-y-10">
+      <div className="flex justify-between items-center">
+        <h2 className="text-4xl font-black uppercase text-gray-300 tracking-tighter">Configurações</h2>
+        <button onClick={() => { setModalType('empresa'); setEditingItem(null); }} className="bg-white/5 border border-white/10 px-8 py-3 rounded-2xl font-black text-[11px] uppercase text-white hover:bg-white/10">Nova Seguradora</button>
+      </div>
+      <div className="bg-[#111827] p-10 rounded-[3rem] border border-gray-800 shadow-xl">
+        <h3 className="text-xl font-black uppercase text-blue-500 mb-8">Parceiros Cadastrados</h3>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          {empresas.map(emp => (
+            <div key={emp.id} className="bg-[#0f172a] p-6 rounded-2xl border border-gray-800 flex justify-between items-center group">
+              <span className="text-sm font-black uppercase text-white">{emp.nome}</span>
+              <button onClick={async () => { if(confirm("Remover?")) await cloud.apagar('empresas', emp.id!); }} className="text-red-500 opacity-0 group-hover:opacity-100 transition-all"><i className="fas fa-trash"></i></button>
             </div>
-
-            <button onClick={save} className="w-full bg-blue-600 p-6 rounded-[2rem] font-black uppercase text-white shadow-xl shadow-blue-600/20 hover:scale-105 active:scale-95 transition-all mt-6">Confirmar Objetivos</button>
-          </div>
+          ))}
         </div>
       </div>
-    );
-  };
-
-  const LeadSuhaiView = () => {
-    // FILTRO RIGOROSO: Apenas Suhai E status Pagamento Efetuado
-    const suhaiRecords = filteredVendas.filter(v => v.suhai && v.status === 'Pagamento Efetuado');
-    const totalComissao = suhaiRecords.reduce((acc, v) => acc + (user?.isAdmin ? v.comissao_cheia : v.comissao_vendedor), 0);
-    const totalPremio = suhaiRecords.reduce((acc, v) => acc + v.valor, 0);
-
-    return (
-      <div className="animate-in fade-in duration-500">
-        <h2 className="text-4xl font-black uppercase text-green-500 mb-10 tracking-tighter">Suhai Gold - Pagos</h2>
-        
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-8 mb-10">
-           <div className="bg-[#111827] p-8 rounded-[2rem] border border-green-500/30 shadow-2xl relative overflow-hidden group">
-              <p className="text-gray-500 text-[10px] font-black uppercase mb-1 tracking-widest">Total Comissão (Pagos Suhai)</p>
-              <h2 className="text-5xl font-black text-green-500 tracking-tighter">{FORMAT_BRL(totalComissao)}</h2>
-           </div>
-           <div className="bg-[#111827] p-8 rounded-[2rem] border border-blue-500/30 shadow-2xl relative overflow-hidden group">
-              <p className="text-gray-500 text-[10px] font-black uppercase mb-1 tracking-widest">Prêmio Líquido Total</p>
-              <h2 className="text-5xl font-black text-blue-500 tracking-tighter">{FORMAT_BRL(totalPremio)}</h2>
-           </div>
-        </div>
-
-        <div className="bg-[#111827] rounded-[2.5rem] border border-gray-800 overflow-hidden shadow-2xl">
-           <div className="overflow-x-auto">
-              <table className="w-full text-left border-collapse">
-                <thead className="bg-[#0f172a] text-gray-400 text-[10px] uppercase font-black">
-                   <tr>
-                      <th className="p-6 border-b border-gray-800">Vendedor</th>
-                      <th className="p-6 border-b border-gray-800">Cliente</th>
-                      <th className="p-6 border-b border-gray-800">Prêmio</th>
-                      <th className="p-6 border-b border-gray-800">Sua Parte</th>
-                      <th className="p-6 border-b border-gray-800 text-center">Status</th>
-                   </tr>
-                </thead>
-                <tbody className="text-xs font-bold uppercase">
-                   {suhaiRecords.map(v => (
-                      <tr key={v.id} className="border-b border-gray-800 hover:bg-gray-800/20 transition-all group">
-                         <td className="p-6">
-                            <span className="bg-blue-600/10 text-blue-400 px-4 py-1.5 rounded-full text-[9px] font-black border border-blue-500/20">
-                               {v.vendedor}
-                            </span>
-                         </td>
-                         <td className="p-6">
-                            <div className="text-white text-sm font-black mb-1">{v.cliente}</div>
-                            <div className="text-[10px] text-gray-500 font-mono">{v.tel}</div>
-                         </td>
-                         <td className="p-6 text-gray-400 font-mono">{FORMAT_BRL(v.valor)}</td>
-                         <td className="p-6 font-black text-green-500 font-mono text-sm">{FORMAT_BRL(user?.isAdmin ? v.comissao_cheia : v.comissao_vendedor)}</td>
-                         <td className="p-6">
-                            <div className="flex justify-center">
-                               <span className="text-[9px] font-black uppercase px-4 py-1.5 rounded-xl bg-green-500/10 text-green-500 border border-green-500/20">PAGO</span>
-                            </div>
-                         </td>
-                      </tr>
-                   ))}
-                </tbody>
-              </table>
-           </div>
-        </div>
-      </div>
-    );
-  };
+    </div>
+  );
 
   const ModalForm = () => {
     const [vf, setVf] = useState<any>(editingItem || {});
@@ -580,6 +573,8 @@ const App: React.FC = () => {
     useEffect(() => {
       if (modalType === 'venda' && !editingItem && user) {
         setVf({ vendedor: user.nome, status: 'Fazer Vistoria', suhai: false, valor: 0, comissao_cheia: 0, comissao_vendedor: 0, empresa: '' });
+      } else if (editingItem) {
+        setVf(editingItem);
       }
     }, [modalType, editingItem, user]);
 
@@ -588,10 +583,11 @@ const App: React.FC = () => {
     const save = async (e: React.FormEvent) => {
       e.preventDefault();
       try {
-        if (modalType === 'venda') await cloud.salvarVenda({ ...vf, dataCriacao: vf.dataCriacao || Date.now() });
-        if (modalType === 'indicacao') await cloud.salvarIndicacao({ ...vf, dataCriacao: vf.dataCriacao || Date.now() });
+        if (modalType === 'venda') await cloud.salvarVenda({ ...vf });
+        if (modalType === 'indicacao') await cloud.salvarIndicacao({ ...vf });
         if (modalType === 'usuario') await cloud.salvarUsuario({ ...vf });
         if (modalType === 'empresa') await cloud.salvarEmpresa({ ...vf });
+        if (modalType === 'meta') await cloud.salvarMeta({ ...vf });
         setModalType(null);
       } catch (err) { alert("Erro ao salvar."); }
     };
@@ -603,47 +599,50 @@ const App: React.FC = () => {
             <h3 className="text-2xl font-black uppercase text-white tracking-tighter">Gerenciar {modalType}</h3>
             <button onClick={() => setModalType(null)} className="text-gray-500 hover:text-white transition"><i className="fas fa-times text-xl"></i></button>
           </div>
-          
           <form onSubmit={save} className="space-y-6">
-            <div className="space-y-4">
-               <input value={vf.cliente || vf.nome || ''} onChange={e => setVf({...vf, [modalType === 'usuario' || modalType === 'empresa' ? 'nome' : 'cliente']: e.target.value})} placeholder="NOME COMPLETO" className="w-full p-5 bg-[#0f172a] border border-gray-800 rounded-2xl text-white font-bold outline-none uppercase focus:border-blue-500" required />
-               {(modalType === 'venda' || modalType === 'indicacao') && (
-                 <>
-                  <input value={vf.tel || ''} onChange={e => setVf({...vf, tel: e.target.value})} placeholder="WHATSAPP / CELULAR" className="w-full p-5 bg-[#0f172a] border border-gray-800 rounded-2xl text-white font-bold outline-none" required />
-                  {modalType === 'venda' && (
-                    <select value={vf.empresa || ''} onChange={e => setVf({...vf, empresa: e.target.value})} className="w-full p-5 bg-[#0f172a] border border-gray-800 rounded-2xl text-white font-bold uppercase outline-none focus:border-blue-500" required>
-                       <option value="">Selecionar Seguradora...</option>
-                       {empresas.map(emp => <option key={emp.id} value={emp.nome}>{emp.nome}</option>)}
-                    </select>
-                  )}
-                 </>
-               )}
-            </div>
+            {(modalType === 'usuario' || modalType === 'empresa' || modalType === 'indicacao' || modalType === 'venda') && (
+              <input value={vf.cliente || vf.nome || ''} onChange={e => setVf({...vf, [modalType === 'usuario' || modalType === 'empresa' ? 'nome' : 'cliente']: e.target.value})} placeholder="NOME" className="w-full p-5 bg-[#0f172a] border border-gray-800 rounded-2xl text-white font-bold outline-none uppercase focus:border-blue-500" required />
+            )}
+
+            {modalType === 'usuario' && (
+              <div className="space-y-4">
+                 <input value={vf.login || ''} onChange={e => setVf({...vf, login: e.target.value})} placeholder="LOGIN" className="w-full p-5 bg-[#0f172a] border border-gray-800 rounded-2xl text-white font-bold outline-none uppercase" required />
+                 <input type="password" value={vf.senha || ''} onChange={e => setVf({...vf, senha: e.target.value})} placeholder="SENHA" className="w-full p-5 bg-[#0f172a] border border-gray-800 rounded-2xl text-white font-bold outline-none" required />
+                 <select value={vf.setor || 'VENDEDOR'} onChange={e => setVf({...vf, setor: e.target.value})} className="w-full p-5 bg-[#0f172a] border border-gray-800 rounded-2xl text-white font-bold outline-none uppercase">
+                   <option value="VENDEDOR">VENDEDOR</option>
+                   <option value="ADMIN">ADMIN</option>
+                 </select>
+                 <input type="number" value={vf.comissao || 0} onChange={e => setVf({...vf, comissao: Number(e.target.value)})} placeholder="COMISSÃO (%)" className="w-full p-5 bg-[#0f172a] border border-gray-800 rounded-2xl text-white font-bold outline-none" />
+              </div>
+            )}
+
+            {modalType === 'meta' && (
+              <div className="space-y-4">
+                 <p className="text-xs font-black uppercase text-blue-400">Vendedor: {vf.vendedor}</p>
+                 <input type="number" value={vf.meta_salario || 0} onChange={e => setVf({...vf, meta_salario: Number(e.target.value)})} placeholder="META SALARIAL (R$)" className="w-full p-5 bg-[#0f172a] border border-gray-800 rounded-2xl text-white font-bold outline-none" />
+                 <input type="number" value={vf.meta_premio || 0} onChange={e => setVf({...vf, meta_premio: Number(e.target.value)})} placeholder="META PRÊMIO (R$)" className="w-full p-5 bg-[#0f172a] border border-gray-800 rounded-2xl text-white font-bold outline-none" />
+                 <input type="number" value={vf.meta_qtd || 0} onChange={e => setVf({...vf, meta_qtd: Number(e.target.value)})} placeholder="META QUANTIDADE" className="w-full p-5 bg-[#0f172a] border border-gray-800 rounded-2xl text-white font-bold outline-none" />
+              </div>
+            )}
 
             {modalType === 'venda' && (
-              <div className="space-y-5">
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                   <input type="number" step="0.01" value={vf.valor || ''} onChange={e => setVf({...vf, valor: Number(e.target.value)})} placeholder="PRÊMIO TOTAL (R$)" className="p-5 bg-[#0f172a] border border-gray-800 rounded-2xl text-white font-mono outline-none" required />
-                   <input type="number" step="0.01" value={vf.comissao_cheia || ''} onChange={e => setVf({...vf, comissao_cheia: Number(e.target.value)})} placeholder="COMISSÃO TOTAL (R$)" className="p-5 bg-[#0f172a] border border-gray-800 rounded-2xl text-white font-mono outline-none" required />
-                   <input type="number" step="0.01" value={vf.comissao_vendedor || ''} onChange={e => setVf({...vf, comissao_vendedor: Number(e.target.value)})} placeholder=" SUA PARTE (R$)" className="p-5 bg-[#0f172a] border border-gray-800 rounded-2xl text-white font-mono outline-none" required />
-                   <select value={vf.status || 'Fazer Vistoria'} onChange={e => setVf({...vf, status: e.target.value})} className="p-5 bg-[#0f172a] border border-gray-800 rounded-2xl text-white font-bold uppercase outline-none">
-                      {VENDA_STATUS_MAP.map(s => <option key={s} value={s}>{s}</option>)}
-                   </select>
-                </div>
-                <div className="flex items-center gap-4 p-5 bg-[#0f172a] border border-gray-800 rounded-2xl">
-                  <input type="checkbox" checked={vf.suhai || false} onChange={e => setVf({...vf, suhai: e.target.checked})} className="w-6 h-6 accent-green-500" id="m-suhai" />
-                  <label htmlFor="m-suhai" className="text-[10px] font-black uppercase text-green-500">Parceria Suhai Gold</label>
-                </div>
-                <select value={vf.vendedor || ''} onChange={e => setVf({...vf, vendedor: e.target.value})} disabled={!user?.isAdmin} className="w-full p-5 bg-[#0f172a] border border-gray-800 rounded-2xl text-white font-bold uppercase outline-none" required>
-                  <option value="">Vendedor...</option>
-                  {usuarios.map(u => <option key={u.id} value={u.nome}>{u.nome}</option>)}
-                </select>
+              <div className="space-y-4">
+                 <input value={vf.tel || ''} onChange={e => setVf({...vf, tel: e.target.value})} placeholder="WHATSAPP" className="w-full p-5 bg-[#0f172a] border border-gray-800 rounded-2xl text-white font-bold outline-none" />
+                 <select value={vf.empresa || ''} onChange={e => setVf({...vf, empresa: e.target.value})} className="w-full p-5 bg-[#0f172a] border border-gray-800 rounded-2xl text-white font-bold outline-none uppercase">
+                   <option value="">SELECIONE SEGURADORA</option>
+                   {empresas.map(e => <option key={e.id} value={e.nome}>{e.nome}</option>)}
+                 </select>
+                 <div className="grid grid-cols-2 gap-4">
+                    <input type="number" step="0.01" value={vf.valor || 0} onChange={e => setVf({...vf, valor: Number(e.target.value)})} placeholder="PRÊMIO (R$)" className="p-5 bg-[#0f172a] border border-gray-800 rounded-2xl text-white font-bold outline-none" />
+                    <input type="number" step="0.01" value={vf.comissao_cheia || 0} onChange={e => setVf({...vf, comissao_cheia: Number(e.target.value)})} placeholder="C. CHEIA (R$)" className="p-5 bg-[#0f172a] border border-gray-800 rounded-2xl text-white font-bold outline-none" />
+                 </div>
+                 <input type="number" step="0.01" value={vf.comissao_vendedor || 0} onChange={e => setVf({...vf, comissao_vendedor: Number(e.target.value)})} placeholder="SUA PARTE (R$)" className="w-full p-5 bg-[#0f172a] border border-gray-800 rounded-2xl text-white font-bold outline-none" />
               </div>
             )}
 
             <div className="flex gap-4 pt-8">
               <button type="button" onClick={() => setModalType(null)} className="flex-1 bg-gray-800 p-6 rounded-[2rem] font-black uppercase text-white hover:bg-gray-700 transition-all">Cancelar</button>
-              <button type="submit" className="flex-1 bg-blue-600 p-6 rounded-[2rem] font-black uppercase text-white shadow-xl shadow-blue-600/20 hover:scale-105 transition-all">Salvar</button>
+              <button type="submit" className="flex-1 bg-blue-600 p-6 rounded-[2rem] font-black uppercase text-white shadow-xl shadow-blue-600/20 hover:scale-105 transition-all">Salvar Alterações</button>
             </div>
           </form>
         </div>
@@ -654,13 +653,13 @@ const App: React.FC = () => {
   if (!isAuthenticated) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-[#0b0f1a]">
-        <div className="bg-[#111827]/80 backdrop-blur-xl p-12 rounded-[3.5rem] shadow-2xl w-full max-w-md border border-gray-800 text-center animate-in zoom-in-95 duration-700">
+        <div className="bg-[#111827] p-12 rounded-[3.5rem] shadow-2xl w-full max-w-md border border-gray-800 text-center animate-in zoom-in-95 duration-700">
           <h1 className="text-4xl font-black mb-1 uppercase tracking-tighter text-white font-mono">VM SEGUROS</h1>
-          <p className="text-gray-500 text-[10px] mb-12 uppercase font-black tracking-[0.4em]">Elite Cloud CRM</p>
+          <p className="text-gray-500 text-[10px] mb-12 uppercase font-black tracking-[0.4em]">Elite Cloud System</p>
           <div className="space-y-5">
             <input type="text" placeholder="LOGIN" className="w-full p-6 rounded-2xl border border-gray-800 bg-[#0f172a] text-white text-sm font-bold uppercase outline-none focus:border-blue-500" value={loginForm.username} onChange={e => setLoginForm({...loginForm, username: e.target.value})} />
             <input type="password" placeholder="SENHA" className="w-full p-6 rounded-2xl border border-gray-800 bg-[#0f172a] text-white text-sm font-bold outline-none focus:border-blue-500" value={loginForm.password} onChange={e => setLoginForm({...loginForm, password: e.target.value})} onKeyDown={e => e.key === 'Enter' && handleLogin()} />
-            <button onClick={handleLogin} className="w-full bg-blue-600 hover:bg-blue-500 p-6 rounded-[2rem] font-black uppercase transition-all shadow-2xl shadow-blue-600/30 text-white active:scale-95">Autenticar</button>
+            <button onClick={handleLogin} className="w-full bg-blue-600 hover:bg-blue-500 p-6 rounded-[2rem] font-black uppercase text-white transition-all shadow-2xl">Acessar CRM</button>
           </div>
         </div>
       </div>
@@ -674,27 +673,21 @@ const App: React.FC = () => {
         {activeSection === 'kanban-indicacoes' && <KanbanIndicacoes />}
         {activeSection === 'kanban-vendas' && <KanbanVendas />}
         {activeSection === 'comissao' && <Financeiro />}
-        {activeSection === 'cadastrar-indicacao' && <DistribuirLeads />}
+        {activeSection === 'cadastrar-indicacao' && <FormLead />}
         {activeSection === 'vendedores' && <VendedoresView />}
         {activeSection === 'metas' && <MetasView />}
         {activeSection === 'lead-suhai-page' && <LeadSuhaiView />}
-        {activeSection === 'configuracoes' && (
-          <div className="animate-in fade-in duration-500 max-w-4xl mx-auto space-y-10">
-            <div className="flex justify-between items-center">
-              <h2 className="text-4xl font-black uppercase text-gray-300">Ajustes</h2>
-              <button onClick={() => { setModalType('empresa'); setEditingItem(null); }} className="bg-white/5 border border-white/10 px-8 py-3 rounded-2xl font-black text-[11px] uppercase text-white hover:bg-white/10">Nova Seguradora</button>
-            </div>
-            <div className="bg-[#111827] p-10 rounded-[3rem] border border-gray-800">
-              <h3 className="text-xl font-black uppercase text-blue-500 mb-8 tracking-tighter">Empresas Parceiras</h3>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                {empresas.map(emp => (
-                  <div key={emp.id} className="bg-[#0f172a] p-6 rounded-2xl border border-gray-800 flex justify-between items-center group">
-                    <span className="text-sm font-black uppercase text-white">{emp.nome}</span>
-                    <button onClick={async () => { if(confirm("Remover?")) await cloud.apagar('empresas', emp.id!); }} className="text-red-500 opacity-0 group-hover:opacity-100"><i className="fas fa-trash"></i></button>
-                  </div>
-                ))}
-              </div>
-            </div>
+        {activeSection === 'configuracoes' && <ConfiguracoesView />}
+        {activeSection === 'links-uteis' && (
+          <div className="animate-in fade-in duration-500 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
+             <a href="https://suhai.com.br" target="_blank" className="bg-[#111827] p-8 rounded-[2.5rem] border border-gray-800 flex items-center justify-between hover:border-green-500 transition-all">
+                <span className="font-black uppercase text-white">Suhai Seguradora</span>
+                <i className="fas fa-external-link-alt text-gray-600"></i>
+             </a>
+             <a href="https://vmsolutions.com.br" target="_blank" className="bg-[#111827] p-8 rounded-[2.5rem] border border-gray-800 flex items-center justify-between hover:border-blue-500 transition-all">
+                <span className="font-black uppercase text-white">Portal VM Solutions</span>
+                <i className="fas fa-external-link-alt text-gray-600"></i>
+             </a>
           </div>
         )}
       </div>
