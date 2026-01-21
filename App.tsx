@@ -255,7 +255,6 @@ const App: React.FC = () => {
            </div>
         </div>
 
-        {/* Bloco de Metas definido pelo usuário (Apenas para Vendedor) */}
         {!user?.isAdmin && stats.userMeta && (
           <div className="animate-in slide-in-from-bottom duration-700">
              <div className="bg-[#111827] p-10 rounded-[3.5rem] border border-blue-500/20 shadow-[0_0_50px_rgba(59,130,246,0.1)] relative overflow-hidden">
@@ -268,7 +267,6 @@ const App: React.FC = () => {
                 </h3>
 
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-10">
-                   {/* Meta Quantidade */}
                    <div className="space-y-4">
                       <div className="flex justify-between items-end">
                          <div>
@@ -282,7 +280,6 @@ const App: React.FC = () => {
                       </div>
                    </div>
 
-                   {/* Meta Prêmio */}
                    <div className="space-y-4">
                       <div className="flex justify-between items-end">
                          <div>
@@ -297,7 +294,6 @@ const App: React.FC = () => {
                       <p className="text-[9px] text-gray-600 font-bold uppercase">Meta: {FORMAT_BRL(stats.userMeta.meta_premio)}</p>
                    </div>
 
-                   {/* Meta Comissão/Salário */}
                    <div className="space-y-4">
                       <div className="flex justify-between items-end">
                          <div>
@@ -432,42 +428,44 @@ const App: React.FC = () => {
         )}
       </div>
 
-      <div className="flex-1 flex gap-6 overflow-x-auto pb-6 scrollbar-thin">
+      {/* Ajuste de gap-6 para gap-4 para economizar espaço horizontal */}
+      <div className="flex-1 flex gap-4 overflow-x-auto pb-6 scrollbar-thin">
         {VENDA_STATUS_MAP.map(status => (
           <div key={status} className="kanban-column bg-[#0f172a] rounded-[2.5rem] p-5 border border-gray-800 flex flex-col">
             <h3 className="text-[10px] font-black uppercase text-gray-500 mb-6 text-center tracking-[0.2em]">{status}</h3>
             <div className="flex-1 space-y-4 overflow-y-auto pr-2 scrollbar-thin">
               {filteredVendas.filter(v => v.status === status).map(v => (
-                <div key={v.id} className="group bg-[#111827] border border-gray-800 p-5 rounded-[2.5rem] border-l-4 border-l-blue-600 hover:scale-[1.02] transition-all shadow-xl relative">
-                  <div className="absolute top-4 left-4">
+                /* Ajuste de padding p-5 para p-4 e rounded-[2.5rem] para rounded-[2rem] */
+                <div key={v.id} className="group bg-[#111827] border border-gray-800 p-4 rounded-[2rem] border-l-4 border-l-blue-600 hover:scale-[1.02] transition-all shadow-xl relative">
+                  <div className="absolute top-3 left-3">
                     <input type="checkbox" checked={selectedVendas.includes(v.id!)} onChange={() => toggleVendaSelection(v.id!)} className="w-4 h-4 rounded accent-blue-500 cursor-pointer" />
                   </div>
-                  <div className="absolute top-4 right-4">
+                  <div className="absolute top-3 right-3">
                      <button onClick={() => { setModalType('venda'); setEditingItem(v); }} className="text-gray-600 hover:text-blue-500 transition-colors p-2"><i className="fas fa-pen text-[10px]"></i></button>
                   </div>
                   <div className="flex justify-between items-start mb-1 ml-6 mr-8">
-                    <h4 onClick={() => { setModalType('venda'); setEditingItem(v); }} className="text-[13px] font-black uppercase text-white cursor-pointer hover:text-blue-500 leading-tight">{v.cliente}</h4>
+                    <h4 onClick={() => { setModalType('venda'); setEditingItem(v); }} className="text-[12px] font-black uppercase text-white cursor-pointer hover:text-blue-500 leading-tight">{v.cliente}</h4>
                     {v.suhai && <i className="fas fa-star text-green-500 text-[10px] s-suhai-pulse"></i>}
                   </div>
-                  <p className="text-[10px] text-blue-400 font-bold mb-2 ml-6 flex items-center gap-1"><i className="fab fa-whatsapp"></i>{v.tel}</p>
-                  <p className="text-[9px] text-gray-500 font-black uppercase mb-3 ml-6">{v.empresa || 'Seguradora'}</p>
-                  <div className="bg-[#0f172a] p-4 rounded-2xl mb-4 border border-gray-800 text-center shadow-inner">
-                    <p className="text-[8px] text-gray-500 font-black uppercase mb-1">Prêmio Líquido</p>
-                    <p className="text-[16px] font-black text-white">{FORMAT_BRL(v.valor)}</p>
+                  <p className="text-[9px] text-blue-400 font-bold mb-2 ml-6 flex items-center gap-1"><i className="fab fa-whatsapp"></i>{v.tel}</p>
+                  <p className="text-[8px] text-gray-500 font-black uppercase mb-3 ml-6">{v.empresa || 'Seguradora'}</p>
+                  <div className="bg-[#0f172a] p-3 rounded-2xl mb-4 border border-gray-800 text-center shadow-inner">
+                    <p className="text-[7px] text-gray-500 font-black uppercase mb-1">Prêmio Líquido</p>
+                    <p className="text-[14px] font-black text-white">{FORMAT_BRL(v.valor)}</p>
                   </div>
-                  <div className="grid grid-cols-2 gap-3 mb-4">
-                    <div className="bg-gray-800/40 p-3 rounded-xl border border-gray-800 text-center">
-                      <p className="text-[7px] font-black text-gray-500 uppercase mb-1">C. Cheia</p>
-                      <p className="text-[10px] font-bold text-gray-300">{FORMAT_BRL(v.comissao_cheia)}</p>
+                  <div className="grid grid-cols-2 gap-2 mb-4">
+                    <div className="bg-gray-800/40 p-2 rounded-xl border border-gray-800 text-center">
+                      <p className="text-[6px] font-black text-gray-500 uppercase mb-1">C. Cheia</p>
+                      <p className="text-[9px] font-bold text-gray-300">{FORMAT_BRL(v.comissao_cheia)}</p>
                     </div>
-                    <div className="bg-green-500/5 p-3 rounded-xl border border-green-500/20 text-center">
-                      <p className="text-[7px] font-black text-green-500 uppercase mb-1">Sua Parte</p>
-                      <p className="text-[10px] font-black text-green-400">{FORMAT_BRL(v.comissao_vendedor)}</p>
+                    <div className="bg-green-500/5 p-2 rounded-xl border border-green-500/20 text-center">
+                      <p className="text-[6px] font-black text-green-500 uppercase mb-1">Sua Parte</p>
+                      <p className="text-[9px] font-black text-green-400">{FORMAT_BRL(v.comissao_vendedor)}</p>
                     </div>
                   </div>
                   <div className="flex justify-between items-center pt-2 border-t border-gray-800">
                     <button disabled={VENDA_STATUS_MAP.indexOf(v.status) === 0} onClick={() => moveVenda(v, 'left')} className="w-8 h-8 rounded-full bg-gray-800 flex items-center justify-center text-gray-400 hover:bg-blue-600 hover:text-white disabled:opacity-0 transition-all"><i className="fas fa-chevron-left text-[10px]"></i></button>
-                    <div className="text-center"><p className="text-[9px] text-blue-400 font-black uppercase">{v.vendedor}</p></div>
+                    <div className="text-center"><p className="text-[8px] text-blue-400 font-black uppercase">{v.vendedor}</p></div>
                     <button disabled={VENDA_STATUS_MAP.indexOf(v.status) === VENDA_STATUS_MAP.length - 1} onClick={() => moveVenda(v, 'right')} className="w-8 h-8 rounded-full bg-gray-800 flex items-center justify-center text-gray-400 hover:bg-blue-600 hover:text-white disabled:opacity-0 transition-all"><i className="fas fa-chevron-right text-[10px]"></i></button>
                   </div>
                 </div>
