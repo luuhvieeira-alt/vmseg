@@ -10,7 +10,6 @@ interface LayoutProps {
   children: React.ReactNode;
 }
 
-// Define interface for navigation items to ensure type safety
 interface NavItem {
   id: string;
   label: string;
@@ -18,7 +17,6 @@ interface NavItem {
   color: string;
 }
 
-// Move static navigation items outside to prevent unnecessary re-renders
 const NAV_ITEMS: NavItem[] = [
   { id: 'dashboard', label: 'Dashboard', icon: 'fa-tachometer-alt', color: '' },
   { id: 'kanban-indicacoes', label: 'Indicações', icon: 'fa-stream', color: '' },
@@ -31,10 +29,10 @@ const ADMIN_ITEMS: NavItem[] = [
   { id: 'vendedores', label: 'Vendedores', icon: 'fa-users', color: 'text-red-400' },
   { id: 'metas', label: 'Metas', icon: 'fa-bullseye', color: 'text-blue-400' },
   { id: 'lead-suhai-page', label: 'Lead Suhai', icon: 'fa-star', color: 'text-green-400' },
+  { id: 'performance', label: 'Performance', icon: 'fa-chart-pie', color: 'text-purple-400' },
   { id: 'configuracoes', label: 'Configurações', icon: 'fa-cog', color: 'text-gray-400' },
 ];
 
-// Refactored NavButton component to be a proper React.FC, which handles the 'key' prop correctly in JSX lists
 const NavButton: React.FC<{ 
   item: NavItem; 
   activeSection: string; 
@@ -68,7 +66,6 @@ const Layout: React.FC<LayoutProps> = ({ user, onLogout, activeSection, setActiv
       <div className="flex flex-1 overflow-hidden">
         <aside className="w-64 bg-[#111827] border-r border-gray-800 hidden md:block overflow-y-auto scrollbar-thin">
           <nav className="p-4 space-y-1">
-            {/* Fix: Using NavButton as a proper component to resolve 'key' prop Type errors */}
             {NAV_ITEMS.map(item => (
               <NavButton 
                 key={item.id} 

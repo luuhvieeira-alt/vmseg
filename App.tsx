@@ -149,6 +149,119 @@ const App: React.FC = () => {
 
   // --- Views ---
 
+  const PerformanceTeamView = () => {
+    const metrics = useMemo(() => {
+      const now = new Date();
+      const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1).getTime();
+      const mesVendas = vendas.filter(v => v.dataCriacao >= startOfMonth);
+
+      // Lógica de normalização estrita:
+      // ITURAN e ALLIANZ separadas
+      // Vazio, 'OUTRAS' ou 'SUHAI' -> SUHAI SEGURADORA
+      const getNormalizedEmpresa = (rawEmp?: string) => {
+        if (!rawEmp || rawEmp.trim() === '') return 'SUHAI SEGURADORA';
+        const empUpper = rawEmp.toUpperCase().trim();
+        if (empUpper === 'OUTRAS') return 'SUHAI SEGURADORA';
+        if (empUpper.includes('SUHAI')) return 'SUHAI SEGURADORA';
+        return empUpper; // ALLIANZ, ITURAN, TOKIO MARINE, etc permanecem como digitados (em caixa alta)
+      };
+
+      const userList = usuarios.filter(u => u.setor === 'VENDEDOR');
+      
+      // Métricas por Vendedor - Baseado em TUDO o que foi cadastrado (Produção Real)
+      const perUser = userList.map(u => {
+        const myVendas = mesVendas.filter(v => v.vendedor === u.nome);
+        const empresas: Record<string, number> = {};
+        myVendas.forEach(v => {
+          const emp = getNormalizedEmpresa(v.empresa);
+          empresas[emp] = (empresas[emp] || 0) + 1;
+        });
+
+        return {
+          nome: u.nome,
+          totalVendas: myVendas.length,
+          empresas,
+          // Agora soma toda a produção para bater 100% com o Kanban
+          comissaoTotal: myVendas.reduce((acc, v) => acc + (v.comissao_cheia || 0), 0),
+          premioTotal: myVendas.reduce((acc, v) => acc + (v.valor || 0), 0)
+        };
+      });
+
+      // Cálculo Global consolidado
+      const globalEmpresas: Record<string, number> = {};
+      perUser.forEach(mu => {
+        Object.entries(mu.empresas).forEach(([emp, count]) => {
+          globalEmpresas[emp] = (globalEmpresas[emp] || 0) + (count as number);
+        });
+      });
+
+      return { globalEmpresas, perUser };
+    }, [vendas, usuarios]);
+
+    return (
+      <div className="animate-in fade-in duration-500">
+        <h2 className="text-4xl font-black uppercase text-purple-400 mb-10 tracking-tighter">Performance Team</h2>
+        
+        {/* Topo: Ranking Global de Empresas */}
+        <div className="bg-[#111827] p-8 rounded-[3rem] border border-gray-800 mb-10 shadow-2xl">
+          <h3 className="text-xl font-black uppercase text-white mb-6 flex items-center gap-3">
+             <i className="fas fa-building text-purple-500"></i> Produção por Seguradora (Mês)
+          </h3>
+          <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-5 gap-4">
+            {Object.entries(metrics.globalEmpresas).sort((a,b) => (b[1] as number) - (a[1] as number)).map(([name, count]) => (
+              <div key={name} className="bg-[#0f172a] p-4 rounded-2xl border border-gray-800 text-center border-t-4 border-t-blue-500/50">
+                <p className="text-[10px] font-black text-gray-500 uppercase mb-1">{name}</p>
+                <p className="text-2xl font-black text-white">{count}</p>
+                <p className="text-[8px] font-bold text-purple-400 uppercase">Apólices em Produção</p>
+              </div>
+            ))}
+            {Object.keys(metrics.globalEmpresas).length === 0 && (
+              <div className="col-span-full py-6 text-center text-gray-600 font-bold uppercase text-[10px]">Aguardando lançamentos no mês</div>
+            )}
+          </div>
+        </div>
+
+        {/* Lista de Vendedores */}
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
+          {metrics.perUser.map(mu => (
+            <div key={mu.nome} className="bg-[#111827] p-8 rounded-[3rem] border border-gray-800 border-t-8 border-t-purple-600 shadow-2xl hover:scale-[1.02] transition-all">
+               <h4 className="text-xl font-black uppercase text-white mb-6 text-center">{mu.nome}</h4>
+               
+               <div className="bg-[#0f172a] p-5 rounded-2xl border border-gray-800 mb-6 text-center shadow-inner">
+                  <p className="text-[10px] text-gray-500 font-black uppercase mb-1">Produção Total (Mês)</p>
+                  <p className="text-4xl font-black text-purple-400">{mu.totalVendas}</p>
+               </div>
+
+               <div className="space-y-4 mb-8">
+                  <p className="text-[10px] font-black text-gray-500 uppercase border-b border-gray-800 pb-2">Quebra por Empresa</p>
+                  <div className="grid grid-cols-2 gap-2">
+                    {Object.entries(mu.empresas).map(([e, c]) => (
+                      <div key={e} className="flex justify-between items-center text-[11px] font-bold">
+                        <span className="text-gray-400 uppercase">{e}</span>
+                        <span className="text-white bg-purple-900/30 px-2 py-0.5 rounded-lg">{c}</span>
+                      </div>
+                    ))}
+                    {Object.keys(mu.empresas).length === 0 && <p className="text-[10px] text-gray-700 uppercase">Sem registros</p>}
+                  </div>
+               </div>
+
+               <div className="grid grid-cols-2 gap-4">
+                  <div className="bg-green-500/5 p-4 rounded-2xl border border-green-500/10 text-center">
+                     <p className="text-[8px] text-green-500 font-black uppercase mb-1">C. Produzida</p>
+                     <p className="text-[12px] font-black text-white">{FORMAT_BRL(mu.comissaoTotal)}</p>
+                  </div>
+                  <div className="bg-blue-500/5 p-4 rounded-2xl border border-blue-500/10 text-center">
+                     <p className="text-[8px] text-blue-500 font-black uppercase mb-1">Prêmio Total</p>
+                     <p className="text-[12px] font-black text-white">{FORMAT_BRL(mu.premioTotal)}</p>
+                  </div>
+               </div>
+            </div>
+          ))}
+        </div>
+      </div>
+    );
+  };
+
   const Dashboard = () => {
     const stats = useMemo(() => {
       const now = new Date();
@@ -335,22 +448,12 @@ const App: React.FC = () => {
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
         <div className="relative">
           <i className="fas fa-search absolute left-4 top-1/2 -translate-y-1/2 text-gray-500"></i>
-          <input 
-            type="text" 
-            placeholder="BUSCAR LEADS..." 
-            className="w-full bg-[#111827] border border-gray-800 rounded-2xl py-4 pl-12 pr-4 text-xs font-bold text-white outline-none focus:border-yellow-500 transition-all uppercase"
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-          />
+          <input type="text" placeholder="BUSCAR LEADS..." className="w-full bg-[#111827] border border-gray-800 rounded-2xl py-4 pl-12 pr-4 text-xs font-bold text-white outline-none focus:border-yellow-500 transition-all uppercase" value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} />
         </div>
         {user?.isAdmin && (
            <div className="relative">
              <i className="fas fa-user-tie absolute left-4 top-1/2 -translate-y-1/2 text-gray-500"></i>
-             <select 
-               value={salesmanFilter}
-               onChange={(e) => setSalesmanFilter(e.target.value)}
-               className="w-full bg-[#111827] border border-gray-800 rounded-2xl py-4 pl-12 pr-4 text-xs font-bold text-white outline-none focus:border-yellow-500 transition-all uppercase appearance-none"
-             >
+             <select value={salesmanFilter} onChange={(e) => setSalesmanFilter(e.target.value)} className="w-full bg-[#111827] border border-gray-800 rounded-2xl py-4 pl-12 pr-4 text-xs font-bold text-white outline-none focus:border-yellow-500 transition-all uppercase appearance-none">
                <option value="TODOS">TODOS VENDEDORES</option>
                {usuarios.map(u => <option key={u.id} value={u.nome}>{u.nome}</option>)}
              </select>
@@ -428,14 +531,12 @@ const App: React.FC = () => {
         )}
       </div>
 
-      {/* Ajuste de gap-6 para gap-4 para economizar espaço horizontal */}
       <div className="flex-1 flex gap-4 overflow-x-auto pb-6 scrollbar-thin">
         {VENDA_STATUS_MAP.map(status => (
           <div key={status} className="kanban-column bg-[#0f172a] rounded-[2.5rem] p-5 border border-gray-800 flex flex-col">
             <h3 className="text-[10px] font-black uppercase text-gray-500 mb-6 text-center tracking-[0.2em]">{status}</h3>
             <div className="flex-1 space-y-4 overflow-y-auto pr-2 scrollbar-thin">
               {filteredVendas.filter(v => v.status === status).map(v => (
-                /* Ajuste de padding p-5 para p-4 e rounded-[2.5rem] para rounded-[2rem] */
                 <div key={v.id} className="group bg-[#111827] border border-gray-800 p-4 rounded-[2rem] border-l-4 border-l-blue-600 hover:scale-[1.02] transition-all shadow-xl relative">
                   <div className="absolute top-3 left-3">
                     <input type="checkbox" checked={selectedVendas.includes(v.id!)} onChange={() => toggleVendaSelection(v.id!)} className="w-4 h-4 rounded accent-blue-500 cursor-pointer" />
@@ -709,6 +810,7 @@ const App: React.FC = () => {
         {activeSection === 'vendedores' && <VendedoresView />}
         {activeSection === 'metas' && <MetasView />}
         {activeSection === 'lead-suhai-page' && <LeadSuhaiView />}
+        {activeSection === 'performance' && <PerformanceTeamView />}
         {activeSection === 'configuracoes' && <ConfiguracoesView />}
         {activeSection === 'links-uteis' && (
           <div className="animate-in fade-in duration-500 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
