@@ -68,6 +68,8 @@ const App: React.FC = () => {
     setIsAuthenticated(false);
     setUser(null);
     setLoginForm({ username: '', password: '' });
+    setSelectedVendas([]);
+    setSelectedIndicacoes([]);
   };
 
   // Funções de Movimentação Rápida
@@ -87,21 +89,17 @@ const App: React.FC = () => {
     }
   };
 
-  // Bulk Delete Actions
+  // Bulk Actions
   const handleBulkDeleteVendas = async () => {
-    if (window.confirm(`Deseja excluir permanentemente ${selectedVendas.length} registros?`)) {
-      for (const id of selectedVendas) {
-        await cloud.apagar('vendas', id);
-      }
+    if (window.confirm(`Excluir permanentemente ${selectedVendas.length} registros?`)) {
+      for (const id of selectedVendas) await cloud.apagar('vendas', id);
       setSelectedVendas([]);
     }
   };
 
   const handleBulkDeleteIndicacoes = async () => {
-    if (window.confirm(`Deseja excluir permanentemente ${selectedIndicacoes.length} leads?`)) {
-      for (const id of selectedIndicacoes) {
-        await cloud.apagar('indicacoes', id);
-      }
+    if (window.confirm(`Excluir permanentemente ${selectedIndicacoes.length} leads?`)) {
+      for (const id of selectedIndicacoes) await cloud.apagar('indicacoes', id);
       setSelectedIndicacoes([]);
     }
   };
@@ -143,55 +141,75 @@ const App: React.FC = () => {
 
   // --- Views ---
 
-  // Dashboard component implemented to display summary metrics and charts
   const Dashboard = () => {
     const stats = useMemo(() => {
-      const totalLeads = filteredIndicacoes.length;
-      const totalVendas = filteredVendas.length;
-      const vendasPagas = filteredVendas.filter(v => v.status === 'Pagamento Efetuado');
-      const premioTotal = vendasPagas.reduce((acc, v) => acc + (v.valor || 0), 0);
-      const comissaoTotal = vendasPagas.reduce((acc, v) => acc + (user?.isAdmin ? (v.comissao_cheia || 0) : (v.comissao_vendedor || 0)), 0);
+      const now = new Date();
+      const startOfDay = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
+      const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1).getTime();
+
+      // Define a base de vendas respeitando a hierarquia
+      const baseVendas = user?.isAdmin ? vendas : vendas.filter(v => v.vendedor === user?.nome);
       
-      return { totalLeads, totalVendas, premioTotal, comissaoTotal };
-    }, [filteredIndicacoes, filteredVendas, user]);
+      const hojeVendas = baseVendas.filter(v => v.dataCriacao >= startOfDay);
+      const mesVendas = baseVendas.filter(v => v.dataCriacao >= startOfMonth);
+      
+      // Regra: No mês, o prêmio líquido soma apenas os que estão em 'Pagamento Efetuado'
+      const mesVendasPagas = mesVendas.filter(v => v.status === 'Pagamento Efetuado');
+
+      return {
+        vendasDia: hojeVendas.length,
+        premioDia: hojeVendas.reduce((acc, v) => acc + (v.valor || 0), 0),
+        vendasMes: mesVendas.length,
+        premioMes: mesVendasPagas.reduce((acc, v) => acc + (v.valor || 0), 0)
+      };
+    }, [vendas, user]);
 
     return (
       <div className="animate-in fade-in duration-500">
-        <div className="flex justify-between items-center mb-10">
-          <div>
-            <h2 className="text-4xl font-black uppercase text-white tracking-tighter">Resumo Geral</h2>
-            <p className="text-[10px] font-bold text-gray-500 uppercase tracking-widest">Performance e Métricas em Tempo Real</p>
-          </div>
-        </div>
-
+        <h2 className="text-4xl font-black uppercase text-white tracking-tighter mb-10">Cockpit Geral</h2>
+        
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-12">
-          <div className="bg-[#111827] p-8 rounded-[2.5rem] border border-gray-800 shadow-xl border-l-4 border-l-yellow-500">
-            <p className="text-gray-500 text-[10px] font-black uppercase mb-1">Meus Leads</p>
-            <h3 className="text-4xl font-black text-white">{stats.totalLeads}</h3>
-          </div>
+          {/* Vendas do Dia (Cadastradas hoje) */}
           <div className="bg-[#111827] p-8 rounded-[2.5rem] border border-gray-800 shadow-xl border-l-4 border-l-blue-500">
-            <p className="text-gray-500 text-[10px] font-black uppercase mb-1">Total Vendas</p>
-            <h3 className="text-4xl font-black text-white">{stats.totalVendas}</h3>
+            <p className="text-gray-500 text-[10px] font-black uppercase mb-1">Vendas (Hoje)</p>
+            <h3 className="text-5xl font-black text-white">{stats.vendasDia}</h3>
+            <p className="text-[9px] text-gray-600 mt-2 uppercase font-bold">Lançamentos do dia</p>
           </div>
-          <div className="bg-[#111827] p-8 rounded-[2.5rem] border border-gray-800 shadow-xl border-l-4 border-l-white">
-            <p className="text-gray-500 text-[10px] font-black uppercase mb-1">Prêmio Total</p>
-            <h3 className="text-4xl font-black text-white">{FORMAT_BRL(stats.premioTotal)}</h3>
-          </div>
+          
+          {/* Prêmio Líquido do Dia (Cadastrado hoje) */}
           <div className="bg-[#111827] p-8 rounded-[2.5rem] border border-gray-800 shadow-xl border-l-4 border-l-green-500">
-            <p className="text-gray-500 text-[10px] font-black uppercase mb-1">Sua Comissão</p>
-            <h3 className="text-4xl font-black text-green-500">{FORMAT_BRL(stats.comissaoTotal)}</h3>
+            <p className="text-gray-500 text-[10px] font-black uppercase mb-1">Prêmio Líquido (Hoje)</p>
+            <h3 className="text-3xl font-black text-green-500">{FORMAT_BRL(stats.premioDia)}</h3>
+            <p className="text-[9px] text-gray-600 mt-2 uppercase font-bold">Total produzido hoje</p>
+          </div>
+
+          {/* Quantidade no Mês (Total do mês) */}
+          <div className="bg-[#111827] p-8 rounded-[2.5rem] border border-gray-800 shadow-xl border-l-4 border-l-yellow-500">
+            <p className="text-gray-500 text-[10px] font-black uppercase mb-1">Vendas (No Mês)</p>
+            <h3 className="text-5xl font-black text-white">{stats.vendasMes}</h3>
+            <p className="text-[9px] text-gray-600 mt-2 uppercase font-bold">Total acumulado mês</p>
+          </div>
+
+          {/* Prêmio Líquido no Mês (Somente com status Pago) */}
+          <div className="bg-[#111827] p-8 rounded-[2.5rem] border border-gray-800 shadow-xl border-l-4 border-l-white">
+            <p className="text-gray-500 text-[10px] font-black uppercase mb-1">Prêmio Líquido (No Mês)</p>
+            <h3 className="text-3xl font-black text-white">{FORMAT_BRL(stats.premioMes)}</h3>
+            <p className="text-[9px] text-gray-400 mt-2 uppercase font-bold">Apenas pagamentos confirmados</p>
           </div>
         </div>
 
+        {/* Funil de Produção */}
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
            <div className="bg-[#111827] p-10 rounded-[3rem] border border-gray-800 shadow-2xl">
               <h3 className="text-xl font-black uppercase text-white mb-8 flex items-center gap-3">
-                <i className="fas fa-chart-line text-blue-500"></i> Funil de Vendas
+                <i className="fas fa-chart-line text-blue-500"></i> Funil de Produção
               </h3>
               <div className="space-y-6">
                 {VENDA_STATUS_MAP.map(status => {
-                  const count = filteredVendas.filter(v => v.status === status).length;
-                  const percent = stats.totalVendas > 0 ? (count / stats.totalVendas) * 100 : 0;
+                  const myVendas = user?.isAdmin ? vendas : vendas.filter(v => v.vendedor === user?.nome);
+                  const count = myVendas.filter(v => v.status === status).length;
+                  const total = myVendas.length;
+                  const percent = total > 0 ? (count / total) * 100 : 0;
                   return (
                     <div key={status} className="space-y-2">
                       <div className="flex justify-between text-[10px] font-black uppercase text-gray-500">
@@ -199,7 +217,7 @@ const App: React.FC = () => {
                         <span className="text-white">{count} ({percent.toFixed(0)}%)</span>
                       </div>
                       <div className="h-2 bg-[#0f172a] rounded-full overflow-hidden border border-gray-800">
-                        <div className="h-full bg-blue-600 shadow-[0_0_10px_rgba(37,99,235,0.5)] transition-all duration-1000" style={{ width: `${percent}%` }}></div>
+                        <div className="h-full bg-blue-600 shadow-[0_0_10px_rgba(37,99,235,0.5)] transition-all" style={{ width: `${percent}%` }}></div>
                       </div>
                     </div>
                   );
@@ -213,8 +231,10 @@ const App: React.FC = () => {
               </h3>
               <div className="space-y-6">
                 {INDICACAO_STATUS_MAP.map(status => {
-                  const count = filteredIndicacoes.filter(i => i.status === status).length;
-                  const percent = stats.totalLeads > 0 ? (count / stats.totalLeads) * 100 : 0;
+                  const myLeads = user?.isAdmin ? indicacoes : indicacoes.filter(i => i.vendedor === user?.nome);
+                  const count = myLeads.filter(i => i.status === status).length;
+                  const total = myLeads.length;
+                  const percent = total > 0 ? (count / total) * 100 : 0;
                   return (
                     <div key={status} className="space-y-2">
                       <div className="flex justify-between text-[10px] font-black uppercase text-gray-500">
@@ -222,7 +242,7 @@ const App: React.FC = () => {
                         <span className="text-white">{count} ({percent.toFixed(0)}%)</span>
                       </div>
                       <div className="h-2 bg-[#0f172a] rounded-full overflow-hidden border border-gray-800">
-                        <div className="h-full bg-yellow-500 shadow-[0_0_10px_rgba(234,179,8,0.5)] transition-all duration-1000" style={{ width: `${percent}%` }}></div>
+                        <div className="h-full bg-yellow-500 shadow-[0_0_10px_rgba(234,179,8,0.5)] transition-all" style={{ width: `${percent}%` }}></div>
                       </div>
                     </div>
                   );
@@ -239,7 +259,7 @@ const App: React.FC = () => {
       <div className="flex justify-between items-center mb-8">
         <div>
           <h2 className="text-3xl font-black uppercase text-yellow-500 tracking-tighter">Leads</h2>
-          <p className="text-[10px] font-bold text-gray-500 uppercase">Selecione para excluir ou use as setas para mover</p>
+          <p className="text-[10px] font-bold text-gray-500 uppercase">Selecione para excluir em massa</p>
         </div>
         <div className="flex gap-4">
           {selectedIndicacoes.length > 0 && (
@@ -255,7 +275,7 @@ const App: React.FC = () => {
         <i className="fas fa-search absolute left-4 top-1/2 -translate-y-1/2 text-gray-500"></i>
         <input 
           type="text" 
-          placeholder="PESQUISAR LEADS..." 
+          placeholder="BUSCAR LEADS..." 
           className="w-full bg-[#111827] border border-gray-800 rounded-2xl py-4 pl-12 pr-4 text-xs font-bold text-white outline-none focus:border-yellow-500 transition-all uppercase"
           value={searchTerm}
           onChange={(e) => setSearchTerm(e.target.value)}
@@ -268,7 +288,7 @@ const App: React.FC = () => {
             <h3 className="text-[10px] font-black uppercase text-gray-500 mb-6 text-center tracking-[0.2em]">{status}</h3>
             <div className="flex-1 space-y-4 overflow-y-auto pr-2 scrollbar-thin">
               {filteredIndicacoes.filter(i => i.status === status).map(i => (
-                <div key={i.id} className="group bg-[#111827] border border-gray-800 p-6 rounded-[2rem] border-l-4 border-l-yellow-500 hover:scale-[1.02] transition-all shadow-xl relative">
+                <div key={i.id} className="group bg-[#111827] border border-gray-800 p-6 rounded-[2.5rem] border-l-4 border-l-yellow-500 hover:scale-[1.02] transition-all shadow-xl relative">
                   <div className="absolute top-4 left-4">
                     <input 
                       type="checkbox" 
@@ -278,9 +298,12 @@ const App: React.FC = () => {
                     />
                   </div>
                   <div className="flex justify-between items-start mb-2 ml-6">
-                    <h4 onClick={() => { setModalType('indicacao'); setEditingItem(i); }} className="text-[12px] font-black uppercase text-white cursor-pointer hover:text-yellow-500">{i.cliente}</h4>
-                    <button onClick={async () => { if(confirm("Excluir?")) await cloud.apagar('indicacoes', i.id!); }} className="text-red-500/30 hover:text-red-500"><i className="fas fa-trash text-[10px]"></i></button>
+                    <h4 onClick={() => { setModalType('indicacao'); setEditingItem(i); }} className="text-[12px] font-black uppercase text-white cursor-pointer hover:text-yellow-500 leading-tight">{i.cliente}</h4>
+                    <button onClick={async () => { if(confirm("Excluir lead?")) await cloud.apagar('indicacoes', i.id!); }} className="text-red-500/30 hover:text-red-500"><i className="fas fa-trash text-[10px]"></i></button>
                   </div>
+                  <p className="text-[10px] text-yellow-400 font-bold mb-3 ml-6 flex items-center gap-1">
+                    <i className="fab fa-whatsapp"></i>{i.tel}
+                  </p>
                   <p className="text-[10px] text-gray-500 font-bold uppercase mb-4 ml-6">{i.veiculo}</p>
                   
                   <div className="flex justify-between items-center pt-3 border-t border-gray-800">
@@ -302,7 +325,7 @@ const App: React.FC = () => {
       <div className="flex justify-between items-center mb-8">
         <div>
           <h2 className="text-3xl font-black uppercase text-blue-500 tracking-tighter">Produção</h2>
-          <p className="text-[10px] font-bold text-gray-500 uppercase">Gestão completa de apólices e comissões</p>
+          <p className="text-[10px] font-bold text-gray-500 uppercase">Selecione para excluir registros</p>
         </div>
         <div className="flex gap-4">
           {selectedVendas.length > 0 && (
@@ -318,7 +341,7 @@ const App: React.FC = () => {
         <i className="fas fa-search absolute left-4 top-1/2 -translate-y-1/2 text-gray-500"></i>
         <input 
           type="text" 
-          placeholder="PESQUISAR CLIENTE, SEGURADORA OU VENDEDOR..." 
+          placeholder="PESQUISAR PRODUÇÃO..." 
           className="w-full bg-[#111827] border border-gray-800 rounded-2xl py-4 pl-12 pr-4 text-xs font-bold text-white outline-none focus:border-blue-500 transition-all uppercase"
           value={searchTerm}
           onChange={(e) => setSearchTerm(e.target.value)}
@@ -331,7 +354,7 @@ const App: React.FC = () => {
             <h3 className="text-[10px] font-black uppercase text-gray-500 mb-6 text-center tracking-[0.2em]">{status}</h3>
             <div className="flex-1 space-y-4 overflow-y-auto pr-2 scrollbar-thin">
               {filteredVendas.filter(v => v.status === status).map(v => (
-                <div key={v.id} className="group bg-[#111827] border border-gray-800 p-5 rounded-[2.5rem] border-l-4 border-l-blue-600 hover:scale-[1.01] transition-all shadow-xl relative">
+                <div key={v.id} className="group bg-[#111827] border border-gray-800 p-5 rounded-[2.5rem] border-l-4 border-l-blue-600 hover:scale-[1.02] transition-all shadow-xl relative">
                   <div className="absolute top-4 left-4">
                     <input 
                       type="checkbox" 
@@ -345,22 +368,22 @@ const App: React.FC = () => {
                     {v.suhai && <i className="fas fa-star text-green-500 text-[10px] s-suhai-pulse"></i>}
                   </div>
                   
-                  {/* Telefone logo abaixo do nome */}
-                  <p className="text-[10px] text-blue-400 font-bold mb-1 ml-6 flex items-center gap-1">
-                    <i className="fab fa-whatsapp"></i> {v.tel}
+                  {/* Telefone abaixo do nome */}
+                  <p className="text-[10px] text-blue-400 font-bold mb-2 ml-6 flex items-center gap-1">
+                    <i className="fab fa-whatsapp"></i>{v.tel}
                   </p>
                   
-                  <p className="text-[9px] text-gray-500 font-black uppercase mb-3 ml-6">{v.empresa || 'Sem Seguradora'}</p>
+                  <p className="text-[9px] text-gray-500 font-black uppercase mb-3 ml-6">{v.empresa || 'Seguradora não informada'}</p>
                   
-                  <div className="bg-[#0f172a] p-4 rounded-2xl mb-3 border border-gray-800 text-center shadow-inner">
-                    <p className="text-[8px] text-gray-500 font-black uppercase mb-1 tracking-widest">Prêmio Líquido</p>
+                  <div className="bg-[#0f172a] p-4 rounded-2xl mb-4 border border-gray-800 text-center shadow-inner">
+                    <p className="text-[8px] text-gray-500 font-black uppercase mb-1">Prêmio Líquido</p>
                     <p className="text-[16px] font-black text-white">{FORMAT_BRL(v.valor)}</p>
                   </div>
 
-                  {/* Caixinhas de Comissões solicitadas */}
+                  {/* Caixinhas de Comissão abaixo do prêmio */}
                   <div className="grid grid-cols-2 gap-3 mb-4">
-                    <div className="bg-gray-900/50 p-3 rounded-xl border border-gray-800 text-center">
-                      <p className="text-[7px] font-black text-gray-500 uppercase mb-1">C. Cheia</p>
+                    <div className="bg-gray-800/40 p-3 rounded-xl border border-gray-800 text-center">
+                      <p className="text-[7px] font-black text-gray-500 uppercase mb-1">Comissão Cheia</p>
                       <p className="text-[10px] font-bold text-gray-300">{FORMAT_BRL(v.comissao_cheia)}</p>
                     </div>
                     <div className="bg-green-500/5 p-3 rounded-xl border border-green-500/20 text-center">
@@ -485,7 +508,7 @@ const App: React.FC = () => {
             info: f.info.value,
             dataCriacao: Date.now()
           } as any);
-          alert('Lead enviado!');
+          alert('Lead enviado com sucesso!');
           f.reset();
         }} className="space-y-5">
           <input name="cliente" placeholder="NOME DO CLIENTE" className="w-full p-5 bg-[#0f172a] border border-gray-800 rounded-2xl text-white font-bold outline-none uppercase focus:border-blue-500" required />
@@ -559,7 +582,7 @@ const App: React.FC = () => {
           {empresas.map(emp => (
             <div key={emp.id} className="bg-[#0f172a] p-6 rounded-2xl border border-gray-800 flex justify-between items-center group">
               <span className="text-sm font-black uppercase text-white">{emp.nome}</span>
-              <button onClick={async () => { if(confirm("Remover?")) await cloud.apagar('empresas', emp.id!); }} className="text-red-500 opacity-0 group-hover:opacity-100 transition-all"><i className="fas fa-trash"></i></button>
+              <button onClick={async () => { if(confirm("Remover seguradora?")) await cloud.apagar('empresas', emp.id!); }} className="text-red-500 opacity-0 group-hover:opacity-100 transition-all"><i className="fas fa-trash"></i></button>
             </div>
           ))}
         </div>
@@ -589,7 +612,7 @@ const App: React.FC = () => {
         if (modalType === 'empresa') await cloud.salvarEmpresa({ ...vf });
         if (modalType === 'meta') await cloud.salvarMeta({ ...vf });
         setModalType(null);
-      } catch (err) { alert("Erro ao salvar."); }
+      } catch (err) { alert("Erro ao salvar dados."); }
     };
 
     return (
