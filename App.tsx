@@ -155,20 +155,16 @@ const App: React.FC = () => {
       const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1).getTime();
       const mesVendas = vendas.filter(v => v.dataCriacao >= startOfMonth);
 
-      // Lógica de normalização estrita:
-      // ITURAN e ALLIANZ separadas
-      // Vazio, 'OUTRAS' ou 'SUHAI' -> SUHAI SEGURADORA
       const getNormalizedEmpresa = (rawEmp?: string) => {
         if (!rawEmp || rawEmp.trim() === '') return 'SUHAI SEGURADORA';
         const empUpper = rawEmp.toUpperCase().trim();
         if (empUpper === 'OUTRAS') return 'SUHAI SEGURADORA';
         if (empUpper.includes('SUHAI')) return 'SUHAI SEGURADORA';
-        return empUpper; // ALLIANZ, ITURAN, TOKIO MARINE, etc permanecem como digitados (em caixa alta)
+        return empUpper;
       };
 
       const userList = usuarios.filter(u => u.setor === 'VENDEDOR');
       
-      // Métricas por Vendedor - Baseado em TUDO o que foi cadastrado (Produção Real)
       const perUser = userList.map(u => {
         const myVendas = mesVendas.filter(v => v.vendedor === u.nome);
         const empresas: Record<string, number> = {};
@@ -181,13 +177,11 @@ const App: React.FC = () => {
           nome: u.nome,
           totalVendas: myVendas.length,
           empresas,
-          // Agora soma toda a produção para bater 100% com o Kanban
           comissaoTotal: myVendas.reduce((acc, v) => acc + (v.comissao_cheia || 0), 0),
           premioTotal: myVendas.reduce((acc, v) => acc + (v.valor || 0), 0)
         };
       });
 
-      // Cálculo Global consolidado
       const globalEmpresas: Record<string, number> = {};
       perUser.forEach(mu => {
         Object.entries(mu.empresas).forEach(([emp, count]) => {
@@ -202,14 +196,13 @@ const App: React.FC = () => {
       <div className="animate-in fade-in duration-500">
         <h2 className="text-4xl font-black uppercase text-purple-400 mb-10 tracking-tighter">Performance Team</h2>
         
-        {/* Topo: Ranking Global de Empresas */}
         <div className="bg-[#111827] p-8 rounded-[3rem] border border-gray-800 mb-10 shadow-2xl">
           <h3 className="text-xl font-black uppercase text-white mb-6 flex items-center gap-3">
-             <i className="fas fa-building text-purple-500"></i> Produção por Seguradora (Mês)
+             <i className="fas fa-building text-purple-500"></i> Produção Global por Seguradora (Mês)
           </h3>
           <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-5 gap-4">
             {Object.entries(metrics.globalEmpresas).sort((a,b) => (b[1] as number) - (a[1] as number)).map(([name, count]) => (
-              <div key={name} className="bg-[#0f172a] p-4 rounded-2xl border border-gray-800 text-center border-t-4 border-t-blue-500/50">
+              <div key={name} className="bg-[#0f172a] p-4 rounded-2xl border border-gray-800 text-center border-t-4 border-t-purple-600/50">
                 <p className="text-[10px] font-black text-gray-500 uppercase mb-1">{name}</p>
                 <p className="text-2xl font-black text-white">{count}</p>
                 <p className="text-[8px] font-bold text-purple-400 uppercase">Apólices em Produção</p>
@@ -221,14 +214,13 @@ const App: React.FC = () => {
           </div>
         </div>
 
-        {/* Lista de Vendedores */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
           {metrics.perUser.map(mu => (
             <div key={mu.nome} className="bg-[#111827] p-8 rounded-[3rem] border border-gray-800 border-t-8 border-t-purple-600 shadow-2xl hover:scale-[1.02] transition-all">
                <h4 className="text-xl font-black uppercase text-white mb-6 text-center">{mu.nome}</h4>
                
                <div className="bg-[#0f172a] p-5 rounded-2xl border border-gray-800 mb-6 text-center shadow-inner">
-                  <p className="text-[10px] text-gray-500 font-black uppercase mb-1">Produção Total (Mês)</p>
+                  <p className="text-[10px] text-gray-500 font-black uppercase mb-1">Produção Real (Mês)</p>
                   <p className="text-4xl font-black text-purple-400">{mu.totalVendas}</p>
                </div>
 
@@ -241,7 +233,7 @@ const App: React.FC = () => {
                         <span className="text-white bg-purple-900/30 px-2 py-0.5 rounded-lg">{c}</span>
                       </div>
                     ))}
-                    {Object.keys(mu.empresas).length === 0 && <p className="text-[10px] text-gray-700 uppercase">Sem registros</p>}
+                    {Object.keys(mu.empresas).length === 0 && <p className="text-[10px] text-gray-700 uppercase text-center w-full">Sem vendas registradas</p>}
                   </div>
                </div>
 
@@ -251,7 +243,7 @@ const App: React.FC = () => {
                      <p className="text-[12px] font-black text-white">{FORMAT_BRL(mu.comissaoTotal)}</p>
                   </div>
                   <div className="bg-blue-500/5 p-4 rounded-2xl border border-blue-500/10 text-center">
-                     <p className="text-[8px] text-blue-500 font-black uppercase mb-1">Prêmio Total</p>
+                     <p className="text-[8px] text-blue-500 font-black uppercase mb-1">Prêmio Produzido</p>
                      <p className="text-[12px] font-black text-white">{FORMAT_BRL(mu.premioTotal)}</p>
                   </div>
                </div>
@@ -274,7 +266,11 @@ const App: React.FC = () => {
       const mesVendas = baseVendas.filter(v => v.dataCriacao >= startOfMonth);
       const mesVendasPagas = mesVendas.filter(v => v.status === 'Pagamento Efetuado');
 
-      const userMeta = metas.find(m => m.vendedor === user?.nome);
+      const userMeta = metas.find(m => m.vendedor === (user?.isAdmin ? 'EMPRESA_VM_SEGUROS' : user?.nome));
+      const companyMeta = metas.find(m => m.vendedor === 'EMPRESA_VM_SEGUROS');
+
+      const globalMesVendas = vendas.filter(v => v.dataCriacao >= startOfMonth);
+      const globalMesVendasPagas = globalMesVendas.filter(v => v.status === 'Pagamento Efetuado');
 
       return {
         vendasDia: hojeVendas.length,
@@ -282,7 +278,11 @@ const App: React.FC = () => {
         vendasMes: mesVendas.length,
         premioMes: mesVendasPagas.reduce((acc, v) => acc + (v.valor || 0), 0),
         comissaoMes: mesVendasPagas.reduce((acc, v) => acc + (v.comissao_vendedor || 0), 0),
-        userMeta
+        userMeta,
+        companyMeta,
+        globalVendasCount: globalMesVendas.length,
+        globalPremioTotal: globalMesVendasPagas.reduce((acc, v) => acc + (v.valor || 0), 0),
+        globalComissaoTotal: globalMesVendasPagas.reduce((acc, v) => acc + (v.comissao_cheia || 0), 0)
       };
     }, [vendas, metas, user]);
 
@@ -315,6 +315,63 @@ const App: React.FC = () => {
             <p className="text-[9px] text-gray-400 mt-2 uppercase font-bold">Apenas pagamentos confirmados</p>
           </div>
         </div>
+
+        {user?.isAdmin && stats.companyMeta && (
+          <div className="mb-12 animate-in slide-in-from-top duration-700">
+             <div className="bg-[#111827] p-10 rounded-[3.5rem] border border-purple-500/20 shadow-[0_0_50px_rgba(168,85,247,0.1)] relative overflow-hidden">
+                <div className="absolute top-0 right-0 p-8 opacity-10">
+                   <i className="fas fa-building text-9xl text-purple-500"></i>
+                </div>
+                
+                <h3 className="text-2xl font-black uppercase text-white mb-10 flex items-center gap-3">
+                  <i className="fas fa-chart-line text-purple-500"></i> Performance Consolidada (VM SEGUROS)
+                </h3>
+
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-10">
+                   <div className="space-y-4">
+                      <div className="flex justify-between items-end">
+                         <div>
+                            <p className="text-gray-500 text-[10px] font-black uppercase">Vendas Totais Empresa</p>
+                            <h4 className="text-3xl font-black text-white">{stats.globalVendasCount} / <span className="text-gray-600">{stats.companyMeta.meta_qtd}</span></h4>
+                         </div>
+                         <p className="text-[10px] font-black text-purple-400">{((stats.globalVendasCount / stats.companyMeta.meta_qtd) * 100).toFixed(0)}%</p>
+                      </div>
+                      <div className="h-3 bg-[#0f172a] rounded-full border border-gray-800 overflow-hidden">
+                         <div className="h-full bg-purple-500 transition-all duration-1000" style={{ width: `${Math.min((stats.globalVendasCount / stats.companyMeta.meta_qtd) * 100, 100)}%` }}></div>
+                      </div>
+                   </div>
+
+                   <div className="space-y-4">
+                      <div className="flex justify-between items-end">
+                         <div>
+                            <p className="text-gray-500 text-[10px] font-black uppercase">Prêmio Bruto Acumulado</p>
+                            <h4 className="text-2xl font-black text-white">{FORMAT_BRL(stats.globalPremioTotal)}</h4>
+                         </div>
+                         <p className="text-[10px] font-black text-green-500">{((stats.globalPremioTotal / stats.companyMeta.meta_premio) * 100).toFixed(0)}%</p>
+                      </div>
+                      <div className="h-3 bg-[#0f172a] rounded-full border border-gray-800 overflow-hidden">
+                         <div className="h-full bg-green-500 transition-all duration-1000" style={{ width: `${Math.min((stats.globalPremioTotal / stats.companyMeta.meta_premio) * 100, 100)}%` }}></div>
+                      </div>
+                      <p className="text-[9px] text-gray-600 font-bold uppercase">Meta Global: {FORMAT_BRL(stats.companyMeta.meta_premio)}</p>
+                   </div>
+
+                   <div className="space-y-4">
+                      <div className="flex justify-between items-end">
+                         <div>
+                            <p className="text-gray-500 text-[10px] font-black uppercase">Comissão Bruta Empresa</p>
+                            <h4 className="text-2xl font-black text-white">{FORMAT_BRL(stats.globalComissaoTotal)}</h4>
+                         </div>
+                         <p className="text-[10px] font-black text-yellow-500">{((stats.globalComissaoTotal / stats.companyMeta.meta_salario) * 100).toFixed(0)}%</p>
+                      </div>
+                      <div className="h-3 bg-[#0f172a] rounded-full border border-gray-800 overflow-hidden">
+                         <div className="h-full bg-yellow-500 transition-all duration-1000" style={{ width: `${Math.min((stats.globalComissaoTotal / stats.companyMeta.meta_salario) * 100, 100)}%` }}></div>
+                      </div>
+                      <p className="text-[9px] text-gray-600 font-bold uppercase">Meta Faturamento: {FORMAT_BRL(stats.companyMeta.meta_salario)}</p>
+                   </div>
+                </div>
+             </div>
+          </div>
+        )}
 
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 mb-8">
            <div className="bg-[#111827] p-10 rounded-[3rem] border border-gray-800 shadow-2xl">
@@ -704,40 +761,95 @@ const App: React.FC = () => {
   );
 
   const MetasView = () => (
-    <div className="animate-in fade-in duration-500">
-      <div className="flex justify-between items-center mb-10"><h2 className="text-4xl font-black uppercase text-blue-400">Metas</h2></div>
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
-        {usuarios.map(u => {
-           const existingMeta = metas.find(m => m.vendedor === u.nome);
-           const displayMeta = existingMeta || { meta_salario: 0, meta_premio: 0, meta_qtd: 0 };
-           return (
-             <div key={u.id} onClick={() => { setModalType('meta'); setEditingItem(existingMeta ? existingMeta : { vendedor: u.nome }); }} className="bg-[#111827] p-8 rounded-[2.5rem] border border-gray-800 hover:border-blue-500 transition-all cursor-pointer shadow-xl">
-               <h4 className="text-[14px] font-black uppercase text-blue-400 mb-6">{u.nome}</h4>
-               <div className="space-y-4">
-                 <div className="flex justify-between text-[10px] font-black uppercase text-gray-500"><span>Meta Salarial</span><span className="text-white">{FORMAT_BRL(displayMeta.meta_salario)}</span></div>
-                 <div className="flex justify-between text-[10px] font-black uppercase text-gray-500"><span>Meta Prêmio</span><span className="text-white">{FORMAT_BRL(displayMeta.meta_premio)}</span></div>
-                 <div className="flex justify-between text-[10px] font-black uppercase text-gray-500"><span>Quantidade</span><span className="text-white">{displayMeta.meta_qtd}</span></div>
+    <div className="animate-in fade-in duration-500 space-y-12">
+      <div>
+        <h2 className="text-4xl font-black uppercase text-blue-400 mb-10">Metas dos Vendedores</h2>
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
+          {usuarios.filter(u => u.setor === 'VENDEDOR').map(u => {
+             const existingMeta = metas.find(m => m.vendedor === u.nome);
+             const displayMeta = existingMeta || { meta_salario: 0, meta_premio: 0, meta_qtd: 0 };
+             return (
+               <div key={u.id} onClick={() => { setModalType('meta'); setEditingItem(existingMeta ? existingMeta : { vendedor: u.nome }); }} className="bg-[#111827] p-8 rounded-[2.5rem] border border-gray-800 hover:border-blue-500 transition-all cursor-pointer shadow-xl">
+                 <h4 className="text-[14px] font-black uppercase text-blue-400 mb-6">{u.nome}</h4>
+                 <div className="space-y-4">
+                   <div className="flex justify-between text-[10px] font-black uppercase text-gray-500"><span>Meta Salarial</span><span className="text-white">{FORMAT_BRL(displayMeta.meta_salario)}</span></div>
+                   <div className="flex justify-between text-[10px] font-black uppercase text-gray-500"><span>Meta Prêmio</span><span className="text-white">{FORMAT_BRL(displayMeta.meta_premio)}</span></div>
+                   <div className="flex justify-between text-[10px] font-black uppercase text-gray-500"><span>Quantidade</span><span className="text-white">{displayMeta.meta_qtd}</span></div>
+                 </div>
                </div>
-             </div>
-           );
-        })}
+             );
+          })}
+        </div>
       </div>
+
+      {user?.isAdmin && (
+        <div className="border-t border-gray-800 pt-12">
+           <h2 className="text-4xl font-black uppercase text-purple-400 mb-10">Meta da Empresa (VM SEGUROS)</h2>
+           <div className="max-w-xl">
+             <div 
+               onClick={() => { 
+                 const existingMeta = metas.find(m => m.vendedor === 'EMPRESA_VM_SEGUROS');
+                 setModalType('meta'); 
+                 setEditingItem(existingMeta ? existingMeta : { vendedor: 'EMPRESA_VM_SEGUROS' }); 
+               }} 
+               className="bg-[#111827] p-10 rounded-[3rem] border-2 border-dashed border-purple-500/30 hover:border-purple-500 transition-all cursor-pointer shadow-2xl relative group"
+             >
+                <div className="absolute top-6 right-6 text-purple-500 group-hover:scale-125 transition-transform">
+                   <i className="fas fa-edit"></i>
+                </div>
+                {(() => {
+                   const companyMeta = metas.find(m => m.vendedor === 'EMPRESA_VM_SEGUROS');
+                   return (
+                     <div className="space-y-6">
+                        <div className="text-center mb-4">
+                          <p className="text-[10px] font-black uppercase text-gray-500 tracking-widest">Objetivos Globais Mensais</p>
+                          <h4 className="text-2xl font-black text-white mt-1">ESTRATÉGICO VM</h4>
+                        </div>
+                        <div className="grid grid-cols-1 gap-4">
+                          <div className="bg-[#0f172a] p-4 rounded-2xl flex justify-between items-center">
+                             <span className="text-[10px] font-black uppercase text-gray-500">Meta Prêmio</span>
+                             <span className="text-xl font-black text-white">{FORMAT_BRL(companyMeta?.meta_premio || 0)}</span>
+                          </div>
+                          <div className="bg-[#0f172a] p-4 rounded-2xl flex justify-between items-center">
+                             <span className="text-[10px] font-black uppercase text-gray-500">Meta Vendas</span>
+                             <span className="text-xl font-black text-white">{companyMeta?.meta_qtd || 0} UNI</span>
+                          </div>
+                          <div className="bg-[#0f172a] p-4 rounded-2xl flex justify-between items-center">
+                             <span className="text-[10px] font-black uppercase text-gray-500">Meta Comissão</span>
+                             <span className="text-xl font-black text-white">{FORMAT_BRL(companyMeta?.meta_salario || 0)}</span>
+                          </div>
+                        </div>
+                     </div>
+                   );
+                })()}
+             </div>
+           </div>
+        </div>
+      )}
     </div>
   );
 
+  // View for system configuration and entity management
   const ConfiguracoesView = () => (
-    <div className="animate-in fade-in duration-500 max-w-4xl mx-auto space-y-10">
-      <div className="flex justify-between items-center"><h2 className="text-4xl font-black uppercase text-gray-300 tracking-tighter">Configurações</h2><button onClick={() => { setModalType('empresa'); setEditingItem(null); }} className="bg-white/5 border border-white/10 px-8 py-3 rounded-2xl font-black text-[11px] uppercase text-white hover:bg-white/10">Nova Seguradora</button></div>
-      <div className="bg-[#111827] p-10 rounded-[3rem] border border-gray-800 shadow-xl">
-        <h3 className="text-xl font-black uppercase text-blue-500 mb-8">Parceiros Cadastrados</h3>
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          {empresas.map(emp => (
-            <div key={emp.id} className="bg-[#0f172a] p-6 rounded-2xl border border-gray-800 flex justify-between items-center group">
-              <span className="text-sm font-black uppercase text-white">{emp.nome}</span>
-              <button onClick={async () => { if(confirm("Remover seguradora?")) await cloud.apagar('empresas', emp.id!); }} className="text-red-500 opacity-0 group-hover:opacity-100 transition-all"><i className="fas fa-trash"></i></button>
-            </div>
-          ))}
-        </div>
+    <div className="animate-in fade-in duration-500">
+      <div className="flex justify-between items-center mb-10">
+        <h2 className="text-4xl font-black uppercase text-gray-400">Configurações</h2>
+        <button onClick={() => { setModalType('empresa'); setEditingItem(null); }} className="bg-gray-700 px-8 py-3 rounded-2xl font-black text-[11px] uppercase text-white hover:bg-gray-600 transition-all">Nova Seguradora</button>
+      </div>
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
+        {empresas.map(e => (
+          <div key={e.id} onClick={() => { setModalType('empresa'); setEditingItem(e); }} className="bg-[#111827] p-8 rounded-[2.5rem] border border-gray-800 border-l-8 border-l-gray-600 hover:scale-[1.03] transition-all cursor-pointer shadow-xl group">
+             <div className="flex justify-between items-center">
+                <h4 className="text-[14px] font-black uppercase text-white">{e.nome}</h4>
+                <button onClick={async (event) => { event.stopPropagation(); if(confirm("Excluir seguradora?")) await cloud.apagar('empresas', e.id!); }} className="text-red-500/0 group-hover:text-red-500 transition-all"><i className="fas fa-trash"></i></button>
+             </div>
+          </div>
+        ))}
+        {empresas.length === 0 && (
+          <div className="col-span-full py-12 text-center text-gray-700 font-black uppercase text-xs border-2 border-dashed border-gray-800 rounded-[3rem]">
+            Nenhuma seguradora cadastrada. Use o botão acima para começar.
+          </div>
+        )}
       </div>
     </div>
   );
@@ -773,7 +885,33 @@ const App: React.FC = () => {
               <div className="space-y-4"><input value={vf.login || ''} onChange={e => setVf({...vf, login: e.target.value})} placeholder="LOGIN" className="w-full p-5 bg-[#0f172a] border border-gray-800 rounded-2xl text-white font-bold outline-none uppercase" required /><input type="password" value={vf.senha || ''} onChange={e => setVf({...vf, senha: e.target.value})} placeholder="SENHA" className="w-full p-5 bg-[#0f172a] border border-gray-800 rounded-2xl text-white font-bold outline-none" required /><select value={vf.setor || 'VENDEDOR'} onChange={e => setVf({...vf, setor: e.target.value})} className="w-full p-5 bg-[#0f172a] border border-gray-800 rounded-2xl text-white font-bold outline-none uppercase"><option value="VENDEDOR">VENDEDOR</option><option value="ADMIN">ADMIN</option></select><input type="number" value={vf.comissao || 0} onChange={e => setVf({...vf, comissao: Number(e.target.value)})} placeholder="COMISSÃO (%)" className="w-full p-5 bg-[#0f172a] border border-gray-800 rounded-2xl text-white font-bold outline-none" /></div>
             )}
             {modalType === 'meta' && (
-              <div className="space-y-4"><p className="text-xs font-black uppercase text-blue-400">Vendedor: {vf.vendedor}</p><input type="number" value={vf.meta_salario || 0} onChange={e => setVf({...vf, meta_salario: Number(e.target.value)})} placeholder="META SALARIAL (R$)" className="w-full p-5 bg-[#0f172a] border border-gray-800 rounded-2xl text-white font-bold outline-none" /><input type="number" value={vf.meta_premio || 0} onChange={e => setVf({...vf, meta_premio: Number(e.target.value)})} placeholder="META PRÊMIO (R$)" className="w-full p-5 bg-[#0f172a] border border-gray-800 rounded-2xl text-white font-bold outline-none" /><input type="number" value={vf.meta_qtd || 0} onChange={e => setVf({...vf, meta_qtd: Number(e.target.value)})} placeholder="META QUANTIDADE" className="w-full p-5 bg-[#0f172a] border border-gray-800 rounded-2xl text-white font-bold outline-none" /></div>
+              <div className="space-y-5">
+                <div className="bg-[#0f172a] p-4 rounded-2xl border border-gray-800 mb-4">
+                  <p className="text-[10px] font-black uppercase text-purple-400">Objetivo Estratégico</p>
+                  <p className="text-xl font-black text-white">{vf.vendedor === 'EMPRESA_VM_SEGUROS' ? 'VM SEGUROS (GLOBAL)' : vf.vendedor}</p>
+                </div>
+                
+                <div className="space-y-1">
+                  <label className="text-[10px] font-black text-gray-500 uppercase ml-2">
+                    {vf.vendedor === 'EMPRESA_VM_SEGUROS' ? 'META PRÊMIO MENSAL (TOTAL EMPRESA)' : 'META PRÊMIO (R$)'}
+                  </label>
+                  <input type="number" step="0.01" value={vf.meta_premio || 0} onChange={e => setVf({...vf, meta_premio: Number(e.target.value)})} placeholder="0.00" className="w-full p-5 bg-[#0f172a] border border-gray-800 rounded-2xl text-white font-bold outline-none focus:border-green-500" />
+                </div>
+
+                <div className="space-y-1">
+                  <label className="text-[10px] font-black text-gray-500 uppercase ml-2">
+                    {vf.vendedor === 'EMPRESA_VM_SEGUROS' ? 'META QUANTIDADE DE VENDAS (TOTAL EMPRESA)' : 'META QUANTIDADE'}
+                  </label>
+                  <input type="number" value={vf.meta_qtd || 0} onChange={e => setVf({...vf, meta_qtd: Number(e.target.value)})} placeholder="EX: 50" className="w-full p-5 bg-[#0f172a] border border-gray-800 rounded-2xl text-white font-bold outline-none focus:border-blue-500" />
+                </div>
+
+                <div className="space-y-1">
+                  <label className="text-[10px] font-black text-gray-500 uppercase ml-2">
+                    {vf.vendedor === 'EMPRESA_VM_SEGUROS' ? 'META COMISSÃO BRUTA (TOTAL EMPRESA)' : 'META SALARIAL (R$)'}
+                  </label>
+                  <input type="number" step="0.01" value={vf.meta_salario || 0} onChange={e => setVf({...vf, meta_salario: Number(e.target.value)})} placeholder="0.00" className="w-full p-5 bg-[#0f172a] border border-gray-800 rounded-2xl text-white font-bold outline-none focus:border-yellow-500" />
+                </div>
+              </div>
             )}
             {modalType === 'indicacao' && (
                <div className="space-y-5"><div className="grid grid-cols-2 gap-4"><div className="space-y-1"><label className="text-[10px] font-black text-gray-500 uppercase ml-2">WhatsApp / Tel</label><input value={vf.tel || ''} onChange={e => setVf({...vf, tel: e.target.value})} placeholder="(00) 00000-0000" className="w-full p-5 bg-[#0f172a] border border-gray-800 rounded-2xl text-white font-bold outline-none focus:border-yellow-500" required /></div><div className="space-y-1"><label className="text-[10px] font-black text-gray-500 uppercase ml-2">Veículo</label><input value={vf.veiculo || ''} onChange={e => setVf({...vf, veiculo: e.target.value})} placeholder="MODELO" className="w-full p-5 bg-[#0f172a] border border-gray-800 rounded-2xl text-white font-bold outline-none uppercase focus:border-yellow-500" required /></div></div><div className="grid grid-cols-2 gap-4"><div className="space-y-1"><label className="text-[10px] font-black text-gray-500 uppercase ml-2">Vendedor Atribuído</label><select disabled={!user?.isAdmin} value={vf.vendedor || user?.nome || ''} onChange={e => setVf({...vf, vendedor: e.target.value})} className={`w-full p-5 bg-[#0f172a] border border-gray-800 rounded-2xl text-white font-bold outline-none uppercase ${!user?.isAdmin ? 'opacity-50 cursor-not-allowed' : 'focus:border-yellow-500'}`}>{usuarios.map(u => <option key={u.id} value={u.nome}>{u.nome}</option>)}</select></div><div className="space-y-1"><label className="text-[10px] font-black text-gray-500 uppercase ml-2">Status do Funil</label><select value={vf.status || 'NOVA INDICAÇÃO'} onChange={e => setVf({...vf, status: e.target.value})} className="w-full p-5 bg-[#0f172a] border border-gray-800 rounded-2xl text-white font-bold outline-none uppercase focus:border-yellow-500">{INDICACAO_STATUS_MAP.map(s => <option key={s} value={s}>{s}</option>)}</select></div></div><div className="space-y-1"><label className="text-[10px] font-black text-gray-500 uppercase ml-2">Notas Adicionais</label><textarea value={vf.info || ''} onChange={e => setVf({...vf, info: e.target.value})} placeholder="DETALHES..." className="w-full p-5 bg-[#0f172a] border border-gray-800 rounded-2xl text-white font-bold outline-none h-32 uppercase focus:border-yellow-500"></textarea></div><div className="flex items-center gap-4 bg-[#0f172a] p-4 rounded-2xl border border-gray-800"><input type="checkbox" checked={vf.suhai || false} onChange={e => setVf({...vf, suhai: e.target.checked})} className="w-6 h-6 accent-green-500" /><label className="text-xs font-black uppercase text-green-500">Suhai Gold</label></div></div>
