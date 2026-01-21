@@ -147,13 +147,10 @@ const App: React.FC = () => {
       const startOfDay = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
       const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1).getTime();
 
-      // Define a base de vendas respeitando a hierarquia
       const baseVendas = user?.isAdmin ? vendas : vendas.filter(v => v.vendedor === user?.nome);
       
       const hojeVendas = baseVendas.filter(v => v.dataCriacao >= startOfDay);
       const mesVendas = baseVendas.filter(v => v.dataCriacao >= startOfMonth);
-      
-      // Regra: No mês, o prêmio líquido soma apenas os que estão em 'Pagamento Efetuado'
       const mesVendasPagas = mesVendas.filter(v => v.status === 'Pagamento Efetuado');
 
       return {
@@ -169,28 +166,24 @@ const App: React.FC = () => {
         <h2 className="text-4xl font-black uppercase text-white tracking-tighter mb-10">Cockpit Geral</h2>
         
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-12">
-          {/* Vendas do Dia (Cadastradas hoje) */}
           <div className="bg-[#111827] p-8 rounded-[2.5rem] border border-gray-800 shadow-xl border-l-4 border-l-blue-500">
             <p className="text-gray-500 text-[10px] font-black uppercase mb-1">Vendas (Hoje)</p>
             <h3 className="text-5xl font-black text-white">{stats.vendasDia}</h3>
             <p className="text-[9px] text-gray-600 mt-2 uppercase font-bold">Lançamentos do dia</p>
           </div>
           
-          {/* Prêmio Líquido do Dia (Cadastrado hoje) */}
           <div className="bg-[#111827] p-8 rounded-[2.5rem] border border-gray-800 shadow-xl border-l-4 border-l-green-500">
             <p className="text-gray-500 text-[10px] font-black uppercase mb-1">Prêmio Líquido (Hoje)</p>
             <h3 className="text-3xl font-black text-green-500">{FORMAT_BRL(stats.premioDia)}</h3>
             <p className="text-[9px] text-gray-600 mt-2 uppercase font-bold">Total produzido hoje</p>
           </div>
 
-          {/* Quantidade no Mês (Total do mês) */}
           <div className="bg-[#111827] p-8 rounded-[2.5rem] border border-gray-800 shadow-xl border-l-4 border-l-yellow-500">
             <p className="text-gray-500 text-[10px] font-black uppercase mb-1">Vendas (No Mês)</p>
             <h3 className="text-5xl font-black text-white">{stats.vendasMes}</h3>
             <p className="text-[9px] text-gray-600 mt-2 uppercase font-bold">Total acumulado mês</p>
           </div>
 
-          {/* Prêmio Líquido no Mês (Somente com status Pago) */}
           <div className="bg-[#111827] p-8 rounded-[2.5rem] border border-gray-800 shadow-xl border-l-4 border-l-white">
             <p className="text-gray-500 text-[10px] font-black uppercase mb-1">Prêmio Líquido (No Mês)</p>
             <h3 className="text-3xl font-black text-white">{FORMAT_BRL(stats.premioMes)}</h3>
@@ -198,7 +191,6 @@ const App: React.FC = () => {
           </div>
         </div>
 
-        {/* Funil de Produção */}
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
            <div className="bg-[#111827] p-10 rounded-[3rem] border border-gray-800 shadow-2xl">
               <h3 className="text-xl font-black uppercase text-white mb-8 flex items-center gap-3">
@@ -297,13 +289,24 @@ const App: React.FC = () => {
                       className="w-4 h-4 rounded accent-yellow-500 cursor-pointer"
                     />
                   </div>
-                  <div className="flex justify-between items-start mb-2 ml-6">
-                    <h4 onClick={() => { setModalType('indicacao'); setEditingItem(i); }} className="text-[12px] font-black uppercase text-white cursor-pointer hover:text-yellow-500 leading-tight">{i.cliente}</h4>
-                    <button onClick={async () => { if(confirm("Excluir lead?")) await cloud.apagar('indicacoes', i.id!); }} className="text-red-500/30 hover:text-red-500"><i className="fas fa-trash text-[10px]"></i></button>
+                  
+                  {/* Botão de Editar em Leads */}
+                  <div className="absolute top-4 right-4">
+                     <button onClick={() => { setModalType('indicacao'); setEditingItem(i); }} className="text-gray-600 hover:text-yellow-500 transition-colors p-2">
+                        <i className="fas fa-pen text-[10px]"></i>
+                     </button>
                   </div>
+
+                  <div className="flex justify-between items-start mb-2 ml-6 mr-8">
+                    <h4 onClick={() => { setModalType('indicacao'); setEditingItem(i); }} className="text-[12px] font-black uppercase text-white cursor-pointer hover:text-yellow-500 leading-tight">{i.cliente}</h4>
+                    <button onClick={async () => { if(confirm("Excluir lead?")) await cloud.apagar('indicacoes', i.id!); }} className="text-red-500/30 hover:text-red-500 ml-2"><i className="fas fa-trash text-[10px]"></i></button>
+                  </div>
+                  
+                  {/* Telefone destacado em Leads */}
                   <p className="text-[10px] text-yellow-400 font-bold mb-3 ml-6 flex items-center gap-1">
                     <i className="fab fa-whatsapp"></i>{i.tel}
                   </p>
+                  
                   <p className="text-[10px] text-gray-500 font-bold uppercase mb-4 ml-6">{i.veiculo}</p>
                   
                   <div className="flex justify-between items-center pt-3 border-t border-gray-800">
@@ -325,7 +328,7 @@ const App: React.FC = () => {
       <div className="flex justify-between items-center mb-8">
         <div>
           <h2 className="text-3xl font-black uppercase text-blue-500 tracking-tighter">Produção</h2>
-          <p className="text-[10px] font-bold text-gray-500 uppercase">Selecione para excluir registros</p>
+          <p className="text-[10px] font-bold text-gray-500 uppercase">Gestão completa de apólices</p>
         </div>
         <div className="flex gap-4">
           {selectedVendas.length > 0 && (
@@ -363,27 +366,32 @@ const App: React.FC = () => {
                       className="w-4 h-4 rounded accent-blue-500 cursor-pointer"
                     />
                   </div>
-                  <div className="flex justify-between items-start mb-1 ml-6">
+                  
+                  <div className="absolute top-4 right-4">
+                     <button onClick={() => { setModalType('venda'); setEditingItem(v); }} className="text-gray-600 hover:text-blue-500 transition-colors p-2">
+                        <i className="fas fa-pen text-[10px]"></i>
+                     </button>
+                  </div>
+
+                  <div className="flex justify-between items-start mb-1 ml-6 mr-8">
                     <h4 onClick={() => { setModalType('venda'); setEditingItem(v); }} className="text-[13px] font-black uppercase text-white cursor-pointer hover:text-blue-500 leading-tight">{v.cliente}</h4>
                     {v.suhai && <i className="fas fa-star text-green-500 text-[10px] s-suhai-pulse"></i>}
                   </div>
                   
-                  {/* Telefone abaixo do nome */}
                   <p className="text-[10px] text-blue-400 font-bold mb-2 ml-6 flex items-center gap-1">
                     <i className="fab fa-whatsapp"></i>{v.tel}
                   </p>
                   
-                  <p className="text-[9px] text-gray-500 font-black uppercase mb-3 ml-6">{v.empresa || 'Seguradora não informada'}</p>
+                  <p className="text-[9px] text-gray-500 font-black uppercase mb-3 ml-6">{v.empresa || 'Seguradora'}</p>
                   
                   <div className="bg-[#0f172a] p-4 rounded-2xl mb-4 border border-gray-800 text-center shadow-inner">
                     <p className="text-[8px] text-gray-500 font-black uppercase mb-1">Prêmio Líquido</p>
                     <p className="text-[16px] font-black text-white">{FORMAT_BRL(v.valor)}</p>
                   </div>
 
-                  {/* Caixinhas de Comissão abaixo do prêmio */}
                   <div className="grid grid-cols-2 gap-3 mb-4">
                     <div className="bg-gray-800/40 p-3 rounded-xl border border-gray-800 text-center">
-                      <p className="text-[7px] font-black text-gray-500 uppercase mb-1">Comissão Cheia</p>
+                      <p className="text-[7px] font-black text-gray-500 uppercase mb-1">C. Cheia</p>
                       <p className="text-[10px] font-bold text-gray-300">{FORMAT_BRL(v.comissao_cheia)}</p>
                     </div>
                     <div className="bg-green-500/5 p-3 rounded-xl border border-green-500/20 text-center">
@@ -510,15 +518,36 @@ const App: React.FC = () => {
           } as any);
           alert('Lead enviado com sucesso!');
           f.reset();
-        }} className="space-y-5">
-          <input name="cliente" placeholder="NOME DO CLIENTE" className="w-full p-5 bg-[#0f172a] border border-gray-800 rounded-2xl text-white font-bold outline-none uppercase focus:border-blue-500" required />
-          <input name="tel" placeholder="WHATSAPP" className="w-full p-5 bg-[#0f172a] border border-gray-800 rounded-2xl text-white font-bold outline-none focus:border-blue-500" required />
-          <input name="veiculo" placeholder="VEÍCULO" className="w-full p-5 bg-[#0f172a] border border-gray-800 rounded-2xl text-white font-bold outline-none uppercase focus:border-blue-500" required />
-          <select name="vendedor" className="w-full p-5 bg-[#0f172a] border border-gray-800 rounded-2xl text-white font-bold outline-none uppercase" required>
-             {usuarios.map(u => <option key={u.id} value={u.nome}>{u.nome}</option>)}
-          </select>
-          <textarea name="info" placeholder="NOTAS ADICIONAIS" className="w-full p-5 bg-[#0f172a] border border-gray-800 rounded-2xl text-white font-bold outline-none h-32 uppercase"></textarea>
-          <div className="flex items-center gap-4">
+        }} className="space-y-6">
+          <div className="space-y-1">
+             <label className="text-[10px] font-black text-gray-500 uppercase ml-2">Nome do Cliente</label>
+             <input name="cliente" placeholder="NOME COMPLETO" className="w-full p-5 bg-[#0f172a] border border-gray-800 rounded-2xl text-white font-bold outline-none uppercase focus:border-yellow-500" required />
+          </div>
+
+          <div className="grid grid-cols-2 gap-4">
+             <div className="space-y-1">
+                <label className="text-[10px] font-black text-gray-500 uppercase ml-2">WhatsApp / Tel</label>
+                <input name="tel" placeholder="(00) 00000-0000" className="w-full p-5 bg-[#0f172a] border border-gray-800 rounded-2xl text-white font-bold outline-none focus:border-yellow-500" required />
+             </div>
+             <div className="space-y-1">
+                <label className="text-[10px] font-black text-gray-500 uppercase ml-2">Veículo</label>
+                <input name="veiculo" placeholder="MARCA / MODELO" className="w-full p-5 bg-[#0f172a] border border-gray-800 rounded-2xl text-white font-bold outline-none uppercase focus:border-yellow-500" required />
+             </div>
+          </div>
+
+          <div className="space-y-1">
+             <label className="text-[10px] font-black text-gray-500 uppercase ml-2">Atribuir ao Vendedor</label>
+             <select name="vendedor" className="w-full p-5 bg-[#0f172a] border border-gray-800 rounded-2xl text-white font-bold outline-none uppercase focus:border-yellow-500" required>
+                {usuarios.map(u => <option key={u.id} value={u.nome}>{u.nome}</option>)}
+             </select>
+          </div>
+
+          <div className="space-y-1">
+             <label className="text-[10px] font-black text-gray-500 uppercase ml-2">Notas Adicionais</label>
+             <textarea name="info" placeholder="DETALHES DO LEAD..." className="w-full p-5 bg-[#0f172a] border border-gray-800 rounded-2xl text-white font-bold outline-none h-32 uppercase focus:border-yellow-500"></textarea>
+          </div>
+
+          <div className="flex items-center gap-4 bg-[#0f172a] p-4 rounded-2xl border border-gray-800">
             <input type="checkbox" name="suhai" className="w-6 h-6 accent-green-500" />
             <label className="text-xs font-black uppercase text-green-500">Marcar como Suhai Gold</label>
           </div>
@@ -594,8 +623,20 @@ const App: React.FC = () => {
     const [vf, setVf] = useState<any>(editingItem || {});
     
     useEffect(() => {
-      if (modalType === 'venda' && !editingItem && user) {
-        setVf({ vendedor: user.nome, status: 'Fazer Vistoria', suhai: false, valor: 0, comissao_cheia: 0, comissao_vendedor: 0, empresa: '' });
+      if ((modalType === 'venda' || modalType === 'indicacao') && !editingItem && user) {
+        setVf({ 
+          vendedor: user.nome, 
+          status: modalType === 'venda' ? 'Fazer Vistoria' : 'NOVA INDICAÇÃO', 
+          suhai: false, 
+          valor: 0, 
+          comissao_cheia: 0, 
+          comissao_vendedor: 0, 
+          empresa: '',
+          tel: '',
+          cliente: '',
+          veiculo: '',
+          info: ''
+        });
       } else if (editingItem) {
         setVf(editingItem);
       }
@@ -619,12 +660,15 @@ const App: React.FC = () => {
       <div className="fixed inset-0 bg-black/95 backdrop-blur-xl flex items-center justify-center z-[500] p-4 animate-in fade-in duration-300">
         <div className="bg-[#111827] p-10 rounded-[3.5rem] w-full max-w-xl border border-gray-800 shadow-2xl overflow-y-auto max-h-[90vh] scrollbar-thin">
           <div className="flex justify-between items-center mb-8">
-            <h3 className="text-2xl font-black uppercase text-white tracking-tighter">Gerenciar {modalType}</h3>
+            <h3 className="text-2xl font-black uppercase text-white tracking-tighter">Gerenciar {modalType === 'venda' ? 'Produção' : modalType === 'indicacao' ? 'Lead' : modalType}</h3>
             <button onClick={() => setModalType(null)} className="text-gray-500 hover:text-white transition"><i className="fas fa-times text-xl"></i></button>
           </div>
           <form onSubmit={save} className="space-y-6">
             {(modalType === 'usuario' || modalType === 'empresa' || modalType === 'indicacao' || modalType === 'venda') && (
-              <input value={vf.cliente || vf.nome || ''} onChange={e => setVf({...vf, [modalType === 'usuario' || modalType === 'empresa' ? 'nome' : 'cliente']: e.target.value})} placeholder="NOME" className="w-full p-5 bg-[#0f172a] border border-gray-800 rounded-2xl text-white font-bold outline-none uppercase focus:border-blue-500" required />
+              <div className="space-y-1">
+                 <label className="text-[10px] font-black text-gray-500 uppercase ml-2">Nome Completo</label>
+                 <input value={vf.cliente || vf.nome || ''} onChange={e => setVf({...vf, [modalType === 'usuario' || modalType === 'empresa' ? 'nome' : 'cliente']: e.target.value})} placeholder="NOME" className="w-full p-5 bg-[#0f172a] border border-gray-800 rounded-2xl text-white font-bold outline-none uppercase focus:border-blue-500" required />
+              </div>
             )}
 
             {modalType === 'usuario' && (
@@ -648,24 +692,125 @@ const App: React.FC = () => {
               </div>
             )}
 
-            {modalType === 'venda' && (
-              <div className="space-y-4">
-                 <input value={vf.tel || ''} onChange={e => setVf({...vf, tel: e.target.value})} placeholder="WHATSAPP" className="w-full p-5 bg-[#0f172a] border border-gray-800 rounded-2xl text-white font-bold outline-none" />
-                 <select value={vf.empresa || ''} onChange={e => setVf({...vf, empresa: e.target.value})} className="w-full p-5 bg-[#0f172a] border border-gray-800 rounded-2xl text-white font-bold outline-none uppercase">
-                   <option value="">SELECIONE SEGURADORA</option>
-                   {empresas.map(e => <option key={e.id} value={e.nome}>{e.nome}</option>)}
-                 </select>
+            {modalType === 'indicacao' && (
+               <div className="space-y-5">
                  <div className="grid grid-cols-2 gap-4">
-                    <input type="number" step="0.01" value={vf.valor || 0} onChange={e => setVf({...vf, valor: Number(e.target.value)})} placeholder="PRÊMIO (R$)" className="p-5 bg-[#0f172a] border border-gray-800 rounded-2xl text-white font-bold outline-none" />
-                    <input type="number" step="0.01" value={vf.comissao_cheia || 0} onChange={e => setVf({...vf, comissao_cheia: Number(e.target.value)})} placeholder="C. CHEIA (R$)" className="p-5 bg-[#0f172a] border border-gray-800 rounded-2xl text-white font-bold outline-none" />
+                   <div className="space-y-1">
+                      <label className="text-[10px] font-black text-gray-500 uppercase ml-2">WhatsApp / Tel</label>
+                      <input value={vf.tel || ''} onChange={e => setVf({...vf, tel: e.target.value})} placeholder="(00) 00000-0000" className="w-full p-5 bg-[#0f172a] border border-gray-800 rounded-2xl text-white font-bold outline-none focus:border-yellow-500" required />
+                   </div>
+                   <div className="space-y-1">
+                      <label className="text-[10px] font-black text-gray-500 uppercase ml-2">Veículo</label>
+                      <input value={vf.veiculo || ''} onChange={e => setVf({...vf, veiculo: e.target.value})} placeholder="MODELO" className="w-full p-5 bg-[#0f172a] border border-gray-800 rounded-2xl text-white font-bold outline-none uppercase focus:border-yellow-500" required />
+                   </div>
                  </div>
-                 <input type="number" step="0.01" value={vf.comissao_vendedor || 0} onChange={e => setVf({...vf, comissao_vendedor: Number(e.target.value)})} placeholder="SUA PARTE (R$)" className="w-full p-5 bg-[#0f172a] border border-gray-800 rounded-2xl text-white font-bold outline-none" />
+
+                 <div className="grid grid-cols-2 gap-4">
+                    <div className="space-y-1">
+                       <label className="text-[10px] font-black text-gray-500 uppercase ml-2">Vendedor Atribuído</label>
+                       <select 
+                          disabled={!user?.isAdmin} 
+                          value={vf.vendedor || user?.nome || ''} 
+                          onChange={e => setVf({...vf, vendedor: e.target.value})} 
+                          className={`w-full p-5 bg-[#0f172a] border border-gray-800 rounded-2xl text-white font-bold outline-none uppercase ${!user?.isAdmin ? 'opacity-50 cursor-not-allowed' : 'focus:border-yellow-500'}`}
+                       >
+                          {usuarios.map(u => <option key={u.id} value={u.nome}>{u.nome}</option>)}
+                       </select>
+                    </div>
+                    <div className="space-y-1">
+                       <label className="text-[10px] font-black text-gray-500 uppercase ml-2">Status do Funil</label>
+                       <select 
+                          value={vf.status || 'NOVA INDICAÇÃO'} 
+                          onChange={e => setVf({...vf, status: e.target.value})} 
+                          className="w-full p-5 bg-[#0f172a] border border-gray-800 rounded-2xl text-white font-bold outline-none uppercase focus:border-yellow-500"
+                       >
+                          {INDICACAO_STATUS_MAP.map(s => <option key={s} value={s}>{s}</option>)}
+                       </select>
+                    </div>
+                 </div>
+
+                 <div className="space-y-1">
+                    <label className="text-[10px] font-black text-gray-500 uppercase ml-2">Notas Adicionais</label>
+                    <textarea value={vf.info || ''} onChange={e => setVf({...vf, info: e.target.value})} placeholder="DETALHES..." className="w-full p-5 bg-[#0f172a] border border-gray-800 rounded-2xl text-white font-bold outline-none h-32 uppercase focus:border-yellow-500"></textarea>
+                 </div>
+
+                 <div className="flex items-center gap-4 bg-[#0f172a] p-4 rounded-2xl border border-gray-800">
+                    <input type="checkbox" checked={vf.suhai || false} onChange={e => setVf({...vf, suhai: e.target.checked})} className="w-6 h-6 accent-green-500" />
+                    <label className="text-xs font-black uppercase text-green-500">Suhai Gold</label>
+                 </div>
+               </div>
+            )}
+
+            {modalType === 'venda' && (
+              <div className="space-y-5">
+                 <div className="space-y-1">
+                    <label className="text-[10px] font-black text-gray-500 uppercase ml-2">WhatsApp / Telefone</label>
+                    <input value={vf.tel || ''} onChange={e => setVf({...vf, tel: e.target.value})} placeholder="(00) 00000-0000" className="w-full p-5 bg-[#0f172a] border border-gray-800 rounded-2xl text-white font-bold outline-none focus:border-blue-500" />
+                 </div>
+
+                 <div className="grid grid-cols-2 gap-4">
+                    <div className="space-y-1">
+                       <label className="text-[10px] font-black text-gray-500 uppercase ml-2">Vendedor Responsável</label>
+                       <select 
+                          disabled={!user?.isAdmin} 
+                          value={vf.vendedor || user?.nome || ''} 
+                          onChange={e => setVf({...vf, vendedor: e.target.value})} 
+                          className={`w-full p-5 bg-[#0f172a] border border-gray-800 rounded-2xl text-white font-bold outline-none uppercase ${!user?.isAdmin ? 'opacity-50 cursor-not-allowed' : 'focus:border-blue-500'}`}
+                       >
+                          {usuarios.map(u => <option key={u.id} value={u.nome}>{u.nome}</option>)}
+                       </select>
+                    </div>
+                    <div className="space-y-1">
+                       <label className="text-[10px] font-black text-gray-500 uppercase ml-2">Status da Venda</label>
+                       <select 
+                          value={vf.status || 'Fazer Vistoria'} 
+                          onChange={e => setVf({...vf, status: e.target.value})} 
+                          className="w-full p-5 bg-[#0f172a] border border-gray-800 rounded-2xl text-white font-bold outline-none uppercase focus:border-blue-500"
+                       >
+                          {VENDA_STATUS_MAP.map(s => <option key={s} value={s}>{s}</option>)}
+                       </select>
+                    </div>
+                 </div>
+
+                 <div className="space-y-1">
+                    <label className="text-[10px] font-black text-gray-500 uppercase ml-2">Companhia Seguradora</label>
+                    <select value={vf.empresa || ''} onChange={e => setVf({...vf, empresa: e.target.value})} className="w-full p-5 bg-[#0f172a] border border-gray-800 rounded-2xl text-white font-bold outline-none uppercase focus:border-blue-500">
+                      <option value="">SELECIONE SEGURADORA</option>
+                      {empresas.map(e => <option key={e.id} value={e.nome}>{e.nome}</option>)}
+                    </select>
+                 </div>
+
+                 <div className="grid grid-cols-2 gap-4">
+                    <div className="space-y-1">
+                       <label className="text-[10px] font-black text-blue-500 uppercase ml-2">Prêmio Líquido (R$)</label>
+                       <input type="number" step="0.01" value={vf.valor || 0} onChange={e => setVf({...vf, valor: Number(e.target.value)})} placeholder="0,00" className="w-full p-5 bg-[#0f172a] border border-gray-800 rounded-2xl text-white font-bold outline-none focus:border-blue-500" />
+                    </div>
+                    <div className="space-y-1">
+                       <label className="text-[10px] font-black text-yellow-500 uppercase ml-2">Comissão Cheia (R$)</label>
+                       <input type="number" step="0.01" value={vf.comissao_cheia || 0} onChange={e => setVf({...vf, comissao_cheia: Number(e.target.value)})} placeholder="0,00" className="w-full p-5 bg-[#0f172a] border border-gray-800 rounded-2xl text-white font-bold outline-none focus:border-yellow-500" />
+                    </div>
+                 </div>
+
+                 <div className="space-y-1">
+                    <label className="text-[10px] font-black text-green-500 uppercase ml-2">Sua Parte / Vendedor (R$)</label>
+                    <input type="number" step="0.01" value={vf.comissao_vendedor || 0} onChange={e => setVf({...vf, comissao_vendedor: Number(e.target.value)})} placeholder="0,00" className="w-full p-5 bg-[#0f172a] border border-gray-800 rounded-2xl text-white font-bold outline-none focus:border-green-500" />
+                 </div>
+
+                 <div className="flex items-center gap-4 bg-[#0f172a] p-4 rounded-2xl border border-gray-800">
+                    <input 
+                       type="checkbox" 
+                       checked={vf.suhai || false} 
+                       onChange={e => setVf({...vf, suhai: e.target.checked})} 
+                       className="w-6 h-6 accent-green-500" 
+                    />
+                    <label className="text-xs font-black uppercase text-green-500">Marcar como Suhai Gold</label>
+                 </div>
               </div>
             )}
 
             <div className="flex gap-4 pt-8">
               <button type="button" onClick={() => setModalType(null)} className="flex-1 bg-gray-800 p-6 rounded-[2rem] font-black uppercase text-white hover:bg-gray-700 transition-all">Cancelar</button>
-              <button type="submit" className="flex-1 bg-blue-600 p-6 rounded-[2rem] font-black uppercase text-white shadow-xl shadow-blue-600/20 hover:scale-105 transition-all">Salvar Alterações</button>
+              <button type="submit" className="flex-1 bg-blue-600 p-6 rounded-[2rem] font-black uppercase text-white shadow-xl shadow-blue-600/20 hover:scale-105 transition-all">Salvar Dados</button>
             </div>
           </form>
         </div>
