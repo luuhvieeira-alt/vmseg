@@ -41,8 +41,11 @@ const DashboardView: React.FC<{
     const startOfDay = new Date();
     startOfDay.setHours(0, 0, 0, 0);
     const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1).getTime();
+    const uNome = (user?.nome || '').trim().toUpperCase();
     
-    const baseVendas = user?.isAdmin ? vendas : vendas.filter(v => (v.vendedor || '').toUpperCase() === (user?.nome || '').toUpperCase());
+    const baseVendas = user?.isAdmin 
+      ? vendas 
+      : vendas.filter(v => (v.vendedor || '').trim().toUpperCase() === uNome);
     
     const hojeVendas = baseVendas.filter(v => v.dataCriacao >= startOfDay.getTime());
     const mesVendasTotal = baseVendas.filter(v => v.dataCriacao >= startOfMonth);
@@ -50,19 +53,20 @@ const DashboardView: React.FC<{
     
     const vendasHojeCount = hojeVendas.length;
     const premioHojeTotal = hojeVendas.reduce((acc, v) => acc + Number(v.valor || 0), 0);
-    const vendasMesPagasCount = mesVendasPagas.length;
+    const vendasMesTotalCount = mesVendasTotal.length;
     const premioMesPagoTotal = mesVendasPagas.reduce((acc, v) => acc + Number(v.valor || 0), 0);
     
-    // Performance: Ignora 'Fazer Vistoria'
-    const mesVendasProducao = mesVendasTotal.filter(v => v.status !== 'Fazer Vistoria');
-    const vendasProducaoMesCount = mesVendasProducao.length;
-    const premioProducaoMesTotal = mesVendasProducao.reduce((acc, v) => acc + Number(v.valor || 0), 0);
-    const comissaoProducaoMesTotal = mesVendasProducao.reduce((acc, v) => 
+    const statusValidosPerformance = ['Mandar Boletos', 'Falta Pagamento', 'Pagamento Efetuado'];
+    const mesVendasPerformance = mesVendasTotal.filter(v => statusValidosPerformance.includes(v.status));
+    
+    const vendasProducaoMesCount = mesVendasPerformance.length;
+    const premioProducaoMesTotal = mesVendasPerformance.reduce((acc, v) => acc + Number(v.valor || 0), 0);
+    const comissaoProducaoMesTotal = mesVendasPerformance.reduce((acc, v) => 
       acc + Number(user?.isAdmin ? (v.comissao_cheia || 0) : (v.comissao_vendedor || 0)), 0
     );
 
     const companyMeta = metas.find(m => m.vendedor === 'EMPRESA_VM_SEGUROS') || { meta_qtd: 1, meta_premio: 1, meta_salario: 1 };
-    const userMeta = metas.find(m => m.vendedor === user?.nome) || { meta_qtd: 1, meta_premio: 1, meta_salario: 1 };
+    const userMeta = metas.find(m => m.vendedor.toUpperCase() === uNome) || { meta_qtd: 1, meta_premio: 1, meta_salario: 1 };
 
     const funilVendas = VENDA_STATUS_MAP.map(status => {
       const count = mesVendasTotal.filter(v => v.status === status).length;
@@ -70,7 +74,7 @@ const DashboardView: React.FC<{
       return { status, count, pct: Math.round((count / total) * 100) };
     });
 
-    const filteredLeads = indicacoes.filter(i => (user?.isAdmin ? true : (i.vendedor || '').toUpperCase() === (user?.nome || '').toUpperCase()));
+    const filteredLeads = indicacoes.filter(i => (user?.isAdmin ? true : (i.vendedor || '').trim().toUpperCase() === uNome));
     const funilLeads = INDICACAO_STATUS_MAP.map(status => {
       const count = filteredLeads.filter(i => i.status === status).length;
       const total = filteredLeads.length || 1;
@@ -78,7 +82,7 @@ const DashboardView: React.FC<{
     });
 
     return { 
-      vendasHojeCount, premioHojeTotal, vendasMesPagasCount, premioMesPagoTotal, 
+      vendasHojeCount, premioHojeTotal, vendasMesTotalCount, premioMesPagoTotal, 
       vendasProducaoMesCount, premioProducaoMesTotal, comissaoProducaoMesTotal,
       companyMeta, userMeta, funilVendas, funilLeads
     };
@@ -91,7 +95,7 @@ const DashboardView: React.FC<{
 
   return (
     <div className="space-y-10 animate-in fade-in duration-500 max-w-[1600px] mx-auto">
-      <h2 className="text-4xl font-black uppercase text-white tracking-tighter">VOCE SO VENCE AMANHA SE NÃO DESISTIR HOJE!</h2>
+      <h2 className="text-4xl font-black uppercase text-white tracking-tighter">COCKPIT GERAL</h2>
       
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
         <div className="bg-[#111827] p-8 rounded-[2rem] border border-gray-800 border-l-4 border-l-blue-500 shadow-xl">
@@ -106,7 +110,7 @@ const DashboardView: React.FC<{
         </div>
         <div className="bg-[#111827] p-8 rounded-[2rem] border border-gray-800 border-l-4 border-l-yellow-600 shadow-xl">
           <p className="text-gray-500 text-[10px] font-black uppercase mb-3">Vendas (No Mês)</p>
-          <h3 className="text-6xl font-black text-white">{stats.vendasMesPagasCount}</h3>
+          <h3 className="text-6xl font-black text-white">{stats.vendasMesTotalCount}</h3>
           <p className="text-gray-600 text-[8px] font-bold mt-2 uppercase">Total acumulado mês</p>
         </div>
         <div className="bg-[#111827] p-8 rounded-[2rem] border border-gray-800 border-l-4 border-l-white shadow-xl">
@@ -116,48 +120,34 @@ const DashboardView: React.FC<{
         </div>
       </div>
 
-      {(user?.isAdmin || (stats.userMeta && stats.userMeta.meta_qtd > 0)) && (
-        <div className="bg-[#111827] p-10 rounded-[3rem] border border-gray-800 shadow-2xl relative overflow-hidden">
-          <div className="flex justify-between items-center mb-10">
-            <h3 className="text-xl font-black uppercase text-white flex items-center gap-3">
-              <i className="fas fa-chart-line text-purple-500"></i> {user?.isAdmin ? 'PERFORMANCE CONSOLIDADA (VM SEGUROS)' : 'SUA META INDIVIDUAL'}
-            </h3>
-          </div>
-          <div className="grid grid-cols-1 lg:grid-cols-4 gap-12 items-center">
-            <div className="space-y-3">
-              <p className="text-[9px] font-black text-gray-500 uppercase">{user?.isAdmin ? 'VENDAS TOTAIS EMPRESA' : 'VENDAS TOTAIS'}</p>
-              <h4 className="text-2xl font-black text-white">{stats.vendasProducaoMesCount} <span className="text-gray-600">/ {metaRef.meta_qtd}</span></h4>
-              <div className="w-full bg-gray-900 h-2 rounded-full overflow-hidden">
-                <div className="bg-purple-500 h-full transition-all duration-1000" style={{ width: `${salesPct}%` }}></div>
-              </div>
-              <p className="text-right text-[10px] font-black text-purple-500">{salesPct}%</p>
-            </div>
-            <div className="space-y-3">
-              <p className="text-[9px] font-black text-gray-500 uppercase">PRÊMIO BRUTO ACUMULADO</p>
-              <h4 className="text-2xl font-black text-white">{FORMAT_BRL(stats.premioProducaoMesTotal)}</h4>
-              <div className="w-full bg-gray-900 h-2 rounded-full overflow-hidden">
-                <div className="bg-green-500 h-full transition-all duration-1000" style={{ width: `${premioPct}%` }}></div>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-[8px] font-black text-gray-600 uppercase">META: {FORMAT_BRL(metaRef.meta_premio)}</span>
-                <span className="text-[10px] font-black text-green-500">{premioPct}%</span>
-              </div>
-            </div>
-            <div className="space-y-3">
-              <p className="text-[9px] font-black text-gray-500 uppercase">{user?.isAdmin ? 'COMISSÃO BRUTA EMPRESA' : 'MINHA COMISSÃO BRUTA'}</p>
-              <h4 className="text-2xl font-black text-white">{FORMAT_BRL(stats.comissaoProducaoMesTotal)}</h4>
-              <div className="w-full bg-gray-900 h-2 rounded-full overflow-hidden">
-                <div className="bg-yellow-500 h-full transition-all duration-1000" style={{ width: `${comissaoPct}%` }}></div>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-[8px] font-black text-gray-600 uppercase">META: {FORMAT_BRL(metaRef.meta_salario)}</span>
-                <span className="text-[10px] font-black text-yellow-500">{comissaoPct}%</span>
-              </div>
-            </div>
-            <div className="flex justify-end pr-6 opacity-20"><i className="fas fa-building text-gray-400 text-7xl"></i></div>
-          </div>
+      <div className="bg-[#111827] p-10 rounded-[3rem] border border-gray-800 shadow-2xl relative overflow-hidden">
+        <div className="flex justify-between items-center mb-10">
+          <h3 className="text-xl font-black uppercase text-white flex items-center gap-3">
+            <i className="fas fa-chart-line text-purple-500"></i> {user?.isAdmin ? 'PERFORMANCE CONSOLIDADA (VM SEGUROS)' : 'SUA META INDIVIDUAL'}
+          </h3>
         </div>
-      )}
+        <div className="grid grid-cols-1 lg:grid-cols-4 gap-12 items-center">
+          <div className="space-y-3">
+            <p className="text-[9px] font-black text-gray-500 uppercase">{user?.isAdmin ? 'VENDAS TOTAIS EMPRESA' : 'MINHAS VENDAS TOTAIS'}</p>
+            <h4 className="text-2xl font-black text-white">{stats.vendasProducaoMesCount} <span className="text-gray-600">/ {metaRef.meta_qtd}</span></h4>
+            <div className="w-full bg-gray-900 h-2 rounded-full overflow-hidden"><div className="bg-purple-500 h-full transition-all duration-1000" style={{ width: `${salesPct}%` }}></div></div>
+            <p className="text-right text-[10px] font-black text-purple-500">{salesPct}%</p>
+          </div>
+          <div className="space-y-3">
+            <p className="text-[9px] font-black text-gray-500 uppercase">PRÊMIO BRUTO ACUMULADO</p>
+            <h4 className="text-2xl font-black text-white">{FORMAT_BRL(stats.premioProducaoMesTotal)}</h4>
+            <div className="w-full bg-gray-900 h-2 rounded-full overflow-hidden"><div className="bg-green-500 h-full transition-all duration-1000" style={{ width: `${premioPct}%` }}></div></div>
+            <div className="flex justify-between"><span className="text-[8px] font-black text-gray-600 uppercase">META: {FORMAT_BRL(metaRef.meta_premio)}</span><span className="text-[10px] font-black text-green-500">{premioPct}%</span></div>
+          </div>
+          <div className="space-y-3">
+            <p className="text-[9px] font-black text-gray-500 uppercase">{user?.isAdmin ? 'COMISSÃO BRUTA EMPRESA' : 'MINHA COMISSÃO BRUTA'}</p>
+            <h4 className="text-2xl font-black text-white">{FORMAT_BRL(stats.comissaoProducaoMesTotal)}</h4>
+            <div className="w-full bg-gray-900 h-2 rounded-full overflow-hidden"><div className="bg-yellow-500 h-full transition-all duration-1000" style={{ width: `${comissaoPct}%` }}></div></div>
+            <div className="flex justify-between"><span className="text-[8px] font-black text-gray-600 uppercase">META: {FORMAT_BRL(metaRef.meta_salario)}</span><span className="text-[10px] font-black text-yellow-500">{comissaoPct}%</span></div>
+          </div>
+          <div className="flex justify-end pr-6 opacity-20"><i className="fas fa-building text-gray-400 text-7xl"></i></div>
+        </div>
+      </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
         <div className="bg-[#111827] p-10 rounded-[3rem] border border-gray-800 shadow-xl">
@@ -187,17 +177,65 @@ const DashboardView: React.FC<{
   );
 };
 
+const FinanceiroView: React.FC<{ vendas: Venda[], user: AuthUser | null }> = ({ vendas, user }) => {
+  const stats = useMemo(() => {
+    const uNome = (user?.nome || '').trim().toUpperCase();
+    const filtered = user?.isAdmin 
+      ? vendas.filter(v => v.status === 'Pagamento Efetuado')
+      : vendas.filter(v => v.status === 'Pagamento Efetuado' && (v.vendedor || '').trim().toUpperCase() === uNome);
+    
+    const totalComissao = filtered.reduce((acc, v) => acc + (user?.isAdmin ? Number(v.comissao_cheia || 0) : Number(v.comissao_vendedor || 0)), 0);
+    const totalPremio = filtered.reduce((acc, v) => acc + Number(v.valor || 0), 0);
+    return { filtered, totalComissao, totalPremio };
+  }, [vendas, user]);
+
+  return (
+    <div className="space-y-12 animate-in fade-in duration-500 max-w-[1600px] mx-auto">
+      <h2 className="text-4xl font-black uppercase text-green-500 tracking-tighter">FINANCEIRO</h2>
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+        <div className="bg-[#111827] p-10 rounded-[2.5rem] border border-gray-800 border-l-4 border-l-green-500 shadow-2xl flex flex-col items-center justify-center space-y-3"><p className="text-[10px] font-black uppercase text-gray-500 tracking-widest">COMISSÃO ACUMULADA (PAGOS)</p><h1 className="text-6xl font-black text-green-500 font-mono">{FORMAT_BRL(stats.totalComissao)}</h1></div>
+        <div className="bg-[#111827] p-10 rounded-[2.5rem] border border-gray-800 border-l-4 border-l-blue-500 shadow-2xl flex flex-col items-center justify-center space-y-3"><p className="text-[10px] font-black uppercase text-gray-500 tracking-widest">PRÊMIO TOTAL PRODUZIDO</p><h1 className="text-6xl font-black text-blue-500 font-mono">{FORMAT_BRL(stats.totalPremio)}</h1></div>
+      </div>
+      <div className="bg-[#111827] rounded-[2.5rem] border border-gray-800 overflow-hidden shadow-xl">
+        <table className="w-full text-left border-collapse">
+          <thead className="bg-[#0b0f1a]/50 text-[10px] font-black uppercase text-gray-500 tracking-widest">
+            <tr><th className="px-10 py-8 border-b border-gray-800/50">Vendedor</th><th className="px-10 py-8 border-b border-gray-800/50">Cliente</th><th className="px-10 py-8 border-b border-gray-800/50">Prêmio</th><th className="px-10 py-8 border-b border-gray-800/50">Comissão</th><th className="px-10 py-8 border-b border-gray-800/50 text-center">Data</th></tr>
+          </thead>
+          <tbody className="divide-y divide-gray-800/40">
+            {stats.filtered.map(v => (
+              <tr key={v.id} className="text-sm text-white hover:bg-white/5 transition-all">
+                <td className="px-10 py-6 font-bold text-blue-400 uppercase text-[11px]">{v.vendedor}</td>
+                <td className="px-10 py-6 font-black uppercase tracking-tight">{v.cliente}</td>
+                <td className="px-10 py-6 font-bold text-gray-400">{FORMAT_BRL(v.valor)}</td>
+                <td className="px-10 py-6 font-black text-green-500">{FORMAT_BRL(user?.isAdmin ? v.comissao_cheia : v.comissao_vendedor)}</td>
+                <td className="px-10 py-6 text-center text-[10px] text-gray-500 font-bold">{new Date(v.dataCriacao).toLocaleDateString('pt-BR')}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+};
+
 const PerformanceView: React.FC<{
   vendas: Venda[],
-  usuarios: User[],
-  onDeleteSalesmanSales: (nome: string) => void
-}> = ({ vendas, usuarios, onDeleteSalesmanSales }) => {
+  usuarios: User[]
+}> = ({ vendas, usuarios }) => {
   const stats = useMemo(() => {
     const now = new Date();
     const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1).getTime();
     const mesVendas = vendas.filter(v => v.dataCriacao >= startOfMonth);
     const normalize = (n: string) => (n || '').trim().toUpperCase();
-    const vendedorasBase = ['ANA BEATRIZ', 'IGOR VICENTE', 'LUANA VIERA', 'ELEN JACONIS', 'ELEN'];
+
+    const globalPorEmpresa: Record<string, number> = {};
+    mesVendas.forEach(v => {
+      let emp = normalize(v.empresa || 'SUHAI SEGURADORA');
+      if (emp.includes('SUHAI')) emp = 'SUHAI SEGURADORA';
+      globalPorEmpresa[emp] = (globalPorEmpresa[emp] || 0) + 1;
+    });
+
+    const vendedorasBase = ['ANA BEATRIZ', 'IGOR VICENTE', 'LUANA VIERA', 'ELEN JACONIS', 'ELEN', 'GRAZIELE MEDEIROS', 'RODRIGO MARIANO', 'JESSICA REGIS'];
     const todosVendedores = Array.from(new Set([
       ...usuarios.filter(u => u.setor === 'VENDEDOR').map(u => normalize(u.nome)),
       ...vendas.map(v => normalize(v.vendedor)),
@@ -223,25 +261,35 @@ const PerformanceView: React.FC<{
       };
     }).filter(v => v.total > 0 || vendedorasBase.some(base => normalize(base) === v.nome));
 
-    return { vendedores: performanceVendedores };
+    return { vendedores: performanceVendedores, globalPorEmpresa: Object.entries(globalPorEmpresa) };
   }, [vendas, usuarios]);
 
   return (
     <div className="space-y-12 animate-in fade-in duration-500 max-w-[1600px] mx-auto">
       <h2 className="text-4xl font-black uppercase text-purple-500 tracking-tighter">PERFORMANCE TEAM</h2>
+      <div className="bg-[#111827] p-10 rounded-[3rem] border border-gray-800 shadow-2xl">
+         <h3 className="text-sm font-black text-white uppercase mb-8 flex items-center gap-3"><i className="fas fa-building text-purple-500"></i> PRODUÇÃO GLOBAL POR SEGURADORA (MÊS)</h3>
+         <div className="grid grid-cols-2 md:grid-cols-4 gap-6">
+            {stats.globalPorEmpresa.map(([emp, count]) => (
+              <div key={emp} className="bg-[#0b0f1a] p-6 rounded-[2rem] border border-gray-800/50 text-center hover:border-purple-500/50 transition-all">
+                 <p className="text-[8px] font-black text-gray-500 uppercase mb-2">{emp}</p>
+                 <h4 className="text-3xl font-black text-white">{count}</h4>
+                 <p className="text-[7px] font-black text-purple-400 uppercase mt-1">APÓLICES EM PRODUÇÃO</p>
+              </div>
+            ))}
+         </div>
+      </div>
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-10">
         {stats.vendedores.map(v => (
-          <div key={v.nome} className="bg-[#111827] rounded-[3.5rem] p-10 border border-gray-800 shadow-2xl relative group overflow-hidden">
-             <div className="absolute top-0 left-1/2 -translate-x-1/2 w-1/2 h-1 bg-purple-500 rounded-b-full shadow-[0_0_15px_rgba(168,85,247,0.5)]"></div>
-             <button onClick={() => onDeleteSalesmanSales(v.nome)} className="absolute top-6 right-6 text-red-500/20 hover:text-red-500 transition-all z-10"><i className="fas fa-trash-alt text-sm"></i></button>
+          <div key={v.nome} className="bg-[#111827] rounded-[3.5rem] p-10 border border-gray-800 shadow-2xl relative group overflow-hidden border-t-8 border-t-purple-600/50">
              <div className="text-center mb-10">
                <h3 className="text-xl font-black uppercase text-white tracking-tighter mb-8">{v.nome}</h3>
-               <div className="bg-[#0b0f1a] p-8 rounded-[2.5rem] border border-gray-800/50 mb-8"><p className="text-[8px] font-black text-gray-500 uppercase mb-1">PRODUÇÃO TOTAL (MÊS)</p><h4 className="text-6xl font-black text-white">{v.total}</h4></div>
+               <div className="bg-[#0b0f1a] p-10 rounded-[2.5rem] border border-gray-800/50 mb-8"><p className="text-[8px] font-black text-gray-500 uppercase mb-2">PRODUÇÃO REAL (MÊS)</p><h4 className="text-6xl font-black text-purple-500 drop-shadow-[0_0_10px_rgba(168,85,247,0.3)]">{v.total}</h4></div>
                <div className="space-y-4 text-left">
-                  <p className="text-[8px] font-black text-gray-600 uppercase tracking-widest border-b border-gray-800 pb-2">SEGURADORAS</p>
-                  <div className="grid grid-cols-2 gap-x-6 gap-y-2">
+                  <p className="text-[8px] font-black text-gray-600 uppercase tracking-widest border-b border-gray-800 pb-2">QUEBRA POR EMPRESA</p>
+                  <div className="grid grid-cols-1 gap-2">
                     {v.quebra.map(q => (
-                      <div key={q.label} className="flex justify-between items-center"><span className="text-[9px] font-black text-gray-500 uppercase">{q.label}</span><span className="text-[10px] font-black text-purple-400">{q.val}</span></div>
+                      <div key={q.label} className="flex justify-between items-center bg-[#0b0f1a]/30 px-4 py-2 rounded-xl border border-gray-800/30"><span className="text-[9px] font-black text-gray-400 uppercase">{q.label}</span><span className="text-[10px] font-black text-white">{q.val}</span></div>
                     ))}
                   </div>
                </div>
@@ -252,41 +300,6 @@ const PerformanceView: React.FC<{
              </div>
           </div>
         ))}
-      </div>
-    </div>
-  );
-};
-
-const FinanceiroView: React.FC<{ vendas: Venda[], user: AuthUser | null }> = ({ vendas, user }) => {
-  const list = useMemo(() => {
-    const base = user?.isAdmin ? vendas : vendas.filter(v => (v.vendedor || '').toUpperCase() === (user?.nome || '').toUpperCase());
-    return base.filter(v => v.status === 'Pagamento Efetuado').sort((a, b) => b.dataCriacao - a.dataCriacao);
-  }, [vendas, user]);
-  const total = useMemo(() => list.reduce((acc, v) => acc + (user?.isAdmin ? Number(v.comissao_cheia || 0) : Number(v.comissao_vendedor || 0)), 0), [list, user]);
-
-  return (
-    <div className="space-y-10 animate-in fade-in duration-500 max-w-[1600px] mx-auto">
-      <h2 className="text-4xl font-black uppercase text-[#10b981] tracking-tighter">FINANCEIRO</h2>
-      <div className="bg-[#111827] rounded-[3.5rem] p-16 border border-gray-800 shadow-2xl flex flex-col items-center justify-center space-y-4">
-        <p className="text-[10px] font-black uppercase text-gray-500 tracking-[0.3em]">{user?.isAdmin ? 'TOTAL COMISSÃO CHEIA' : 'TOTAL SUA PARTE'}</p>
-        <h1 className="text-8xl font-black text-[#10b981] tracking-tighter drop-shadow-[0_0_20px_rgba(16,185,129,0.2)]">{FORMAT_BRL(total)}</h1>
-      </div>
-      <div className="bg-[#111827] rounded-[3rem] border border-gray-800 overflow-hidden shadow-xl">
-        <table className="w-full text-left border-collapse">
-          <thead className="bg-[#0b0f1a]/50 text-[10px] font-black uppercase text-gray-500 tracking-widest">
-            <tr><th className="px-10 py-8 border-b border-gray-800/50">Data</th><th className="px-10 py-8 border-b border-gray-800/50">Cliente</th><th className="px-10 py-8 border-b border-gray-800/50">Prêmio</th><th className="px-10 py-8 border-b border-gray-800/50">Comissão</th></tr>
-          </thead>
-          <tbody className="divide-y divide-gray-800/40">
-            {list.map(v => (
-              <tr key={v.id} className="text-sm text-white hover:bg-white/5 transition-all">
-                <td className="px-10 py-6 text-[11px] font-bold text-gray-500">{new Date(v.dataCriacao).toLocaleDateString('pt-BR')}</td>
-                <td className="px-10 py-6 font-black uppercase tracking-tight">{v.cliente}</td>
-                <td className="px-10 py-6 font-bold text-gray-400">{FORMAT_BRL(v.valor)}</td>
-                <td className="px-10 py-6 font-black text-[#10b981]">{FORMAT_BRL(user?.isAdmin ? v.comissao_cheia : v.comissao_vendedor)}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
       </div>
     </div>
   );
@@ -350,8 +363,8 @@ const App: React.FC = () => {
   };
 
   const filteredVendas = useMemo(() => {
-    let list = user?.isAdmin ? vendas : vendas.filter(v => (v.vendedor || '').toUpperCase() === (user?.nome || '').toUpperCase());
-    if (user?.isAdmin && salesmanFilter !== 'TODOS') list = list.filter(v => (v.vendedor || '').toUpperCase() === salesmanFilter.toUpperCase());
+    let list = user?.isAdmin ? vendas : vendas.filter(v => (v.vendedor || '').trim().toUpperCase() === (user?.nome || '').trim().toUpperCase());
+    if (user?.isAdmin && salesmanFilter !== 'TODOS') list = list.filter(v => (v.vendedor || '').trim().toUpperCase() === salesmanFilter.trim().toUpperCase());
     if (searchTerm) {
       const low = searchTerm.toLowerCase();
       list = list.filter(v => (v.cliente || '').toLowerCase().includes(low) || (v.vendedor || '').toLowerCase().includes(low));
@@ -360,8 +373,8 @@ const App: React.FC = () => {
   }, [vendas, user, searchTerm, salesmanFilter]);
 
   const filteredIndicacoes = useMemo(() => {
-    let list = user?.isAdmin ? indicacoes : indicacoes.filter(i => (i.vendedor || '').toUpperCase() === (user?.nome || '').toUpperCase());
-    if (user?.isAdmin && salesmanFilter !== 'TODOS') list = list.filter(i => (i.vendedor || '').toUpperCase() === salesmanFilter.toUpperCase());
+    let list = user?.isAdmin ? indicacoes : indicacoes.filter(i => (i.vendedor || '').trim().toUpperCase() === (user?.nome || '').trim().toUpperCase());
+    if (user?.isAdmin && salesmanFilter !== 'TODOS') list = list.filter(i => (i.vendedor || '').trim().toUpperCase() === salesmanFilter.trim().toUpperCase());
     if (searchTerm) {
       const low = searchTerm.toLowerCase();
       list = list.filter(i => (i.cliente || '').toLowerCase().includes(low) || (i.vendedor || '').toLowerCase().includes(low));
@@ -369,24 +382,47 @@ const App: React.FC = () => {
     return list;
   }, [indicacoes, user, searchTerm, salesmanFilter]);
 
+  const salesSuhai = vendas.filter(v => v.status === 'Pagamento Efetuado' && v.suhai);
+  const totalSuhaiComm = salesSuhai.reduce((acc, v) => acc + (user?.isAdmin ? Number(v.comissao_cheia || 0) : Number(v.comissao_vendedor || 0)), 0);
+  const totalSuhaiPrem = salesSuhai.reduce((acc, v) => acc + Number(v.valor || 0), 0);
+
   if (!isAuthenticated) {
     return (
-      <div className="flex items-center justify-center min-h-screen bg-[#0b0f1a] p-4">
-        <div className="bg-[#111827] p-12 rounded-[3.5rem] border border-gray-800 w-full max-w-md shadow-2xl animate-in zoom-in duration-500">
-          <h2 className="text-3xl font-black uppercase mb-10 text-center tracking-tighter text-white">Cloud CRM Login</h2>
-          <div className="space-y-5">
-            <input type="text" placeholder="Usuário" className="w-full p-5 bg-[#0f172a] border border-gray-800 rounded-2xl text-[11px] font-bold text-white uppercase outline-none focus:border-blue-500 transition-all" value={loginForm.username} onChange={e => setLoginForm({...loginForm, username: e.target.value})} />
-            <input type="password" placeholder="Senha" className="w-full p-5 bg-[#0f172a] border border-gray-800 rounded-2xl text-[11px] font-bold text-white outline-none focus:border-blue-500 transition-all" value={loginForm.password} onChange={e => setLoginForm({...loginForm, password: e.target.value})} />
-            <button onClick={handleLogin} className="w-full bg-blue-600 hover:bg-blue-500 p-5 rounded-2xl font-black uppercase text-[11px] text-white transition-all shadow-xl shadow-blue-900/20">Acessar Sistema</button>
+      <div className="min-h-screen bg-[#0b0f1a] flex items-center justify-center p-4">
+        <div className="bg-[#111827] w-full max-w-sm p-8 rounded-[2.5rem] border border-gray-800 shadow-2xl space-y-6 animate-in zoom-in duration-500">
+          <div className="text-center space-y-1">
+            <h1 className="text-2xl font-black uppercase text-white tracking-tighter">VM SEGUROS</h1>
+            <p className="text-[9px] font-black text-gray-500 uppercase tracking-widest">Painel Administrativo</p>
           </div>
+          <div className="space-y-4">
+            <div className="space-y-1">
+              <label className="text-[8px] font-black text-gray-600 uppercase px-1">Login</label>
+              <input 
+                className="w-full bg-[#0b0f1a] border border-gray-800 p-4 rounded-2xl text-white text-xs outline-none focus:border-blue-500 transition-all" 
+                value={loginForm.username} 
+                onChange={e => setLoginForm({...loginForm, username: e.target.value})} 
+              />
+            </div>
+            <div className="space-y-1">
+              <label className="text-[8px] font-black text-gray-600 uppercase px-1">Senha</label>
+              <input 
+                type="password" 
+                className="w-full bg-[#0b0f1a] border border-gray-800 p-4 rounded-2xl text-white text-xs outline-none focus:border-blue-500 transition-all" 
+                value={loginForm.password} 
+                onChange={e => setLoginForm({...loginForm, password: e.target.value})} 
+              />
+            </div>
+          </div>
+          <button 
+            onClick={handleLogin} 
+            className="w-full bg-blue-600 text-white p-4 rounded-2xl font-black uppercase text-[10px] shadow-lg shadow-blue-900/10 active:scale-95 transition-all"
+          >
+            Entrar
+          </button>
         </div>
       </div>
     );
   }
-
-  const salesSuhai = vendas.filter(v => v.status === 'Pagamento Efetuado' && v.suhai);
-  const totalSuhaiComm = salesSuhai.reduce((acc, v) => acc + (user?.isAdmin ? Number(v.comissao_cheia || 0) : Number(v.comissao_vendedor || 0)), 0);
-  const totalSuhaiPrem = salesSuhai.reduce((acc, v) => acc + Number(v.valor || 0), 0);
 
   return (
     <Layout user={user!} onLogout={() => { setIsAuthenticated(false); setUser(null); }} activeSection={activeSection} setActiveSection={setActiveSection}>
@@ -446,25 +482,38 @@ const App: React.FC = () => {
       )}
 
       {activeSection === 'comissao' && <FinanceiroView vendas={vendas} user={user} />}
-      {activeSection === 'performance' && <PerformanceView vendas={vendas} usuarios={usuarios} onDeleteSalesmanSales={async (nome) => { if(window.confirm(`Limpar produção de ${nome}?`)) { const toDelete = vendas.filter(v => (v.vendedor || '').toUpperCase() === nome.toUpperCase()); for(const v of toDelete) await cloud.apagar('vendas', v.id!); } }} />}
+      {activeSection === 'performance' && <PerformanceView vendas={vendas} usuarios={usuarios} />}
+      
       {activeSection === 'metas' && (
         <div className="space-y-12 animate-in fade-in duration-500 max-w-[1600px] mx-auto">
-          <h2 className="text-4xl font-black uppercase text-blue-400 tracking-tighter">METAS DOS VENDEDORES</h2>
+          <div className="flex justify-between items-center"><h2 className="text-4xl font-black uppercase text-blue-400 tracking-tighter">METAS DOS VENDEDORES</h2></div>
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
-            {usuarios.filter(u => u.setor === 'VENDEDOR' || u.nome === 'ELEN JACONIS').map(u => {
-              const meta = metas.find(m => m.vendedor === u.nome) || { vendedor: u.nome, meta_qtd: 0, meta_premio: 0, meta_salario: 0 };
+            {usuarios.filter(u => u.setor === 'VENDEDOR' || u.nome.toUpperCase() === 'ELEN JACONIS').map(u => {
+              const meta = metas.find(m => m.vendedor.toUpperCase() === u.nome.toUpperCase()) || { vendedor: u.nome, meta_qtd: 0, meta_premio: 0, meta_salario: 0 };
               return (
-                <div key={u.id || u.nome} className="bg-[#111827] p-10 rounded-[2.5rem] border border-gray-800 shadow-xl relative group">
-                  <button onClick={() => { setEditingItem(meta); setModalType('meta'); }} className="absolute top-8 right-8 text-gray-600 hover:text-white transition opacity-0 group-hover:opacity-100"><i className="fas fa-edit text-xs"></i></button>
+                <div key={u.id || u.nome} className="bg-[#111827] p-10 rounded-[2.5rem] border border-gray-800 shadow-xl relative group hover:border-blue-500/30 transition-all">
+                  <button onClick={() => { setEditingItem(meta); setModalType('meta'); }} className="absolute top-8 right-8 text-gray-600 hover:text-white transition-all opacity-0 group-hover:opacity-100"><i className="fas fa-edit text-xs"></i></button>
                   <h3 className="text-xl font-black uppercase text-blue-400 mb-8 tracking-tight">{u.nome}</h3>
                   <div className="space-y-4">
                     <div className="flex justify-between items-center"><span className="text-[9px] font-black uppercase text-gray-500 tracking-widest">META SALARIAL</span><span className="text-xs font-black text-white">{FORMAT_BRL(meta.meta_salario)}</span></div>
                     <div className="flex justify-between items-center"><span className="text-[9px] font-black uppercase text-gray-500 tracking-widest">META PRÊMIO</span><span className="text-xs font-black text-white">{FORMAT_BRL(meta.meta_premio)}</span></div>
-                    <div className="flex justify-between items-center"><span className="text-[9px] font-black uppercase text-gray-500 tracking-widest">QUANTIDADE</span><span className="text-xs font-black text-white">{meta.meta_qtd}</span></div>
+                    <div className="flex justify-between items-center"><span className="text-[9px] font-black uppercase text-gray-500 tracking-widest">QUANTIDADE</span><span className="text-xs font-black text-white">{meta.meta_qtd} UNI</span></div>
                   </div>
                 </div>
               );
             })}
+          </div>
+          <div className="mt-20">
+             <h2 className="text-4xl font-black uppercase text-purple-400 tracking-tighter mb-8">META DA EMPRESA (VM SEGUROS)</h2>
+             <div className="bg-[#111827] p-16 rounded-[3.5rem] border-purple-600/30 border-dashed border-2 shadow-2xl relative max-w-2xl overflow-hidden mx-auto">
+                <button onClick={() => { setEditingItem(metas.find(m => m.vendedor === 'EMPRESA_VM_SEGUROS') || { vendedor: 'EMPRESA_VM_SEGUROS', meta_qtd: 0, meta_premio: 0, meta_salario: 0 }); setModalType('meta'); }} className="absolute top-10 right-10 text-purple-400 hover:text-white transition"><i className="fas fa-edit text-lg"></i></button>
+                <div className="text-center mb-12"><p className="text-[9px] font-black uppercase text-gray-500 tracking-[0.5em] mb-2">OBJETIVOS GLOBAIS MENSAIS</p><h3 className="text-3xl font-black uppercase text-white tracking-tighter">ESTRATÉGICO VM</h3></div>
+                <div className="space-y-10">
+                   <div className="flex justify-between items-center"><span className="text-[10px] font-black uppercase text-gray-500 tracking-widest">META PRÊMIO</span><span className="text-2xl font-black text-white">{FORMAT_BRL(metas.find(m => m.vendedor === 'EMPRESA_VM_SEGUROS')?.meta_premio)}</span></div>
+                   <div className="flex justify-between items-center"><span className="text-[10px] font-black uppercase text-gray-500 tracking-widest">META VENDAS</span><span className="text-2xl font-black text-white">{metas.find(m => m.vendedor === 'EMPRESA_VM_SEGUROS')?.meta_qtd} UNI</span></div>
+                   <div className="flex justify-between items-center"><span className="text-[10px] font-black uppercase text-gray-500 tracking-widest">META COMISSÃO</span><span className="text-2xl font-black text-white">{FORMAT_BRL(metas.find(m => m.vendedor === 'EMPRESA_VM_SEGUROS')?.meta_salario)}</span></div>
+                </div>
+             </div>
           </div>
         </div>
       )}
@@ -472,19 +521,11 @@ const App: React.FC = () => {
       {activeSection === 'lead-suhai-page' && (
         <div className="space-y-12 animate-in fade-in duration-500 max-w-[1600px] mx-auto">
           <h2 className="text-4xl font-black uppercase text-[#10b981] tracking-tighter">SUHAI GOLD - PAGOS</h2>
-          
           <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-            <div className="bg-[#111827] p-10 rounded-[3rem] border border-gray-800 border-l-4 border-l-[#10b981] shadow-2xl flex flex-col items-center justify-center space-y-3">
-              <p className="text-[10px] font-black uppercase text-gray-500 tracking-widest">COMISSÃO SUHAI</p>
-              <h1 className="text-6xl font-black text-[#10b981] font-mono">{FORMAT_BRL(totalSuhaiComm)}</h1>
-            </div>
-            <div className="bg-[#111827] p-10 rounded-[3rem] border border-gray-800 border-l-4 border-l-blue-500 shadow-2xl flex flex-col items-center justify-center space-y-3">
-              <p className="text-[10px] font-black uppercase text-gray-500 tracking-widest">PRÊMIO TOTAL</p>
-              <h1 className="text-6xl font-black text-blue-500 font-mono">{FORMAT_BRL(totalSuhaiPrem)}</h1>
-            </div>
+            <div className="bg-[#111827] p-10 rounded-[2.5rem] border border-gray-800 border-l-4 border-l-[#10b981] shadow-2xl flex flex-col items-center justify-center space-y-3"><p className="text-[10px] font-black uppercase text-gray-500 tracking-widest">COMISSÃO SUHAI</p><h1 className="text-6xl font-black text-[#10b981] font-mono">{FORMAT_BRL(totalSuhaiComm)}</h1></div>
+            <div className="bg-[#111827] p-10 rounded-[2.5rem] border border-gray-800 border-l-4 border-l-blue-500 shadow-2xl flex flex-col items-center justify-center space-y-3"><p className="text-[10px] font-black uppercase text-gray-500 tracking-widest">PRÊMIO TOTAL</p><h1 className="text-6xl font-black text-blue-500 font-mono">{FORMAT_BRL(totalSuhaiPrem)}</h1></div>
           </div>
-
-          <div className="bg-[#111827] rounded-[3rem] border border-gray-800 overflow-hidden shadow-xl">
+          <div className="bg-[#111827] rounded-[2.5rem] border border-gray-800 overflow-hidden shadow-xl">
             <table className="w-full text-left border-collapse">
               <thead className="bg-[#0b0f1a]/50 text-[10px] font-black uppercase text-gray-500 tracking-widest">
                 <tr><th className="px-10 py-8 border-b border-gray-800/50">Vendedor</th><th className="px-10 py-8 border-b border-gray-800/50">Cliente</th><th className="px-10 py-8 border-b border-gray-800/50">Prêmio</th><th className="px-10 py-8 border-b border-gray-800/50">Comissão</th><th className="px-10 py-8 border-b border-gray-800/50 text-center">Status</th></tr>
@@ -507,10 +548,10 @@ const App: React.FC = () => {
 
       {activeSection === 'vendedores' && (
         <div className="space-y-10 animate-in fade-in duration-500 max-w-[1600px] mx-auto">
-          <div className="flex justify-between items-center"><h2 className="text-4xl font-black uppercase text-[#ef4444] tracking-tighter">EQUIPE</h2><button onClick={() => { setEditingItem({ setor: 'VENDEDOR', comissao: 30 }); setModalType('usuario'); }} className="bg-[#ef4444] text-white px-10 py-4 rounded-2xl font-black uppercase text-[11px] shadow-lg shadow-red-900/40 hover:scale-105 transition-all">Novo Usuário</button></div>
+          <div className="flex justify-between items-center"><h2 className="text-4xl font-black uppercase text-[#ef4444] tracking-tighter">EQUIPE</h2><button onClick={() => { setEditingItem({ setor: 'VENDEDOR', comissao: 30 }); setModalType('usuario'); }} className="bg-[#ef4444] text-white px-10 py-4 rounded-2xl font-black uppercase text-[11px] shadow-lg hover:scale-105 transition-all">Novo Usuário</button></div>
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
-            {usuarios.filter(u => u.setor === 'VENDEDOR' || u.nome === 'ELEN JACONIS').map(u => (
-              <div key={u.id} className="bg-[#111827] rounded-[2.5rem] p-8 border border-gray-800 relative shadow-xl flex flex-col justify-between hover:border-red-500/30 transition-all group overflow-hidden">
+            {usuarios.filter(u => u.setor === 'VENDEDOR' || u.nome.toUpperCase() === 'ELEN JACONIS').map(u => (
+              <div key={u.id} className="bg-[#111827] rounded-[2.5rem] p-8 border border-gray-800 relative shadow-xl hover:border-red-500/30 transition-all flex flex-col justify-between group overflow-hidden">
                 <div className="pl-4">
                    <div className="flex justify-between items-start mb-1"><h3 className="text-xl font-black uppercase text-white tracking-tight">{u.nome}</h3><button onClick={() => { setEditingItem(u); setModalType('usuario'); }} className="text-gray-600 hover:text-white transition-all"><i className="fas fa-edit text-xs"></i></button></div>
                    <p className="text-[9px] font-black text-gray-600 uppercase tracking-widest mb-10">Setor: {u.setor}</p>
@@ -525,7 +566,7 @@ const App: React.FC = () => {
 
       {activeSection === 'configuracoes' && (
         <div className="space-y-10 animate-in fade-in duration-500 max-w-[1600px] mx-auto">
-          <div className="flex justify-between items-center"><h2 className="text-4xl font-black uppercase text-gray-400 tracking-tighter">CONFIGURAÇÕES</h2><button onClick={() => { setEditingItem({}); setModalType('empresa'); }} className="bg-[#374151] hover:bg-gray-600 text-[10px] font-black uppercase text-white px-8 py-4 rounded-2xl shadow-xl transition-all">NOVA SEGURADORA</button></div>
+          <div className="flex justify-between items-center"><h2 className="text-4xl font-black uppercase text-gray-400 tracking-tighter">CONFIGURAÇÕES</h2><button onClick={() => { setEditingItem({}); setModalType('empresa'); }} className="bg-[#374151] text-[10px] font-black uppercase text-white px-8 py-4 rounded-2xl shadow-xl transition-all">NOVA SEGURADORA</button></div>
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
             {empresas.map(e => (
               <div key={e.id} className="bg-[#111827] rounded-[2.5rem] p-10 border border-gray-800 relative shadow-xl hover:border-gray-600 transition-all group overflow-hidden">
@@ -540,37 +581,91 @@ const App: React.FC = () => {
         <div className="flex flex-col items-center justify-center min-h-full py-10 animate-in fade-in zoom-in duration-500">
           <div className="bg-[#111827] w-full max-w-2xl rounded-[3rem] p-12 border border-gray-800 shadow-2xl space-y-10">
             <h2 className="text-2xl font-black text-yellow-500 text-center uppercase tracking-widest">DISTRIBUIR LEAD</h2>
-            <div className="space-y-6">
-              <div className="space-y-2"><label className="text-[10px] font-black uppercase text-gray-500">CLIENTE</label><input className="w-full bg-[#0b0f1a] border border-gray-800 p-6 rounded-2xl text-white outline-none focus:border-yellow-500" value={distribuirForm.cliente} onChange={e => setDistribuirForm({...distribuirForm, cliente: e.target.value.toUpperCase()})} /></div>
+            <div className="space-y-6 text-left">
+              <div className="space-y-2">
+                <label className="text-[10px] font-black uppercase text-gray-500">CLIENTE</label>
+                <input 
+                  className="w-full bg-[#0b0f1a] border border-gray-800 p-6 rounded-2xl text-white outline-none focus:border-yellow-500 transition-all" 
+                  value={distribuirForm.cliente || ''} 
+                  onChange={e => setDistribuirForm({...distribuirForm, cliente: e.target.value.toUpperCase()})} 
+                />
+              </div>
               <div className="grid grid-cols-2 gap-6">
-                <div className="space-y-2"><label className="text-[10px] font-black uppercase text-gray-500">TEL</label><input className="w-full bg-[#0b0f1a] border border-gray-800 p-6 rounded-2xl text-white outline-none focus:border-yellow-500" value={distribuirForm.tel} onChange={e => setDistribuirForm({...distribuirForm, tel: e.target.value})} /></div>
-                <div className="space-y-2"><label className="text-[10px] font-black uppercase text-gray-500">VEÍCULO</label><input className="w-full bg-[#0b0f1a] border border-gray-800 p-6 rounded-2xl text-white outline-none focus:border-yellow-500" value={distribuirForm.veiculo} onChange={e => setDistribuirForm({...distribuirForm, veiculo: e.target.value.toUpperCase()})} /></div>
+                <div className="space-y-2">
+                  <label className="text-[10px] font-black uppercase text-gray-500">WHATSAPP</label>
+                  <input 
+                    className="w-full bg-[#0b0f1a] border border-gray-800 p-6 rounded-2xl text-white outline-none focus:border-yellow-500 transition-all" 
+                    value={distribuirForm.tel || ''} 
+                    onChange={e => setDistribuirForm({...distribuirForm, tel: e.target.value})} 
+                  />
+                </div>
+                <div className="space-y-2">
+                  <label className="text-[10px] font-black uppercase text-gray-500">VEÍCULO / MODELO</label>
+                  <input 
+                    className="w-full bg-[#0b0f1a] border border-gray-800 p-6 rounded-2xl text-white outline-none focus:border-yellow-500 transition-all" 
+                    value={distribuirForm.veiculo || ''} 
+                    onChange={e => setDistribuirForm({...distribuirForm, veiculo: e.target.value.toUpperCase()})} 
+                  />
+                </div>
               </div>
-              <div className="space-y-2"><label className="text-[10px] font-black uppercase text-gray-500">ATRIBUIR AO VENDEDOR</label><select className="w-full bg-[#0b0f1a] border border-gray-800 p-6 rounded-2xl text-white uppercase outline-none focus:border-yellow-500 appearance-none transition-all" value={distribuirForm.vendedor} onChange={e => setDistribuirForm({...distribuirForm, vendedor: e.target.value})}><option value="">SELECIONE VENDEDOR</option>{Array.from(new Set([...usuarios.map(u => u.nome), 'ELEN JACONIS'])).map(nome => <option key={nome} value={nome}>{nome}</option>)}</select></div>
-              <div className="flex items-center gap-3 p-2 bg-green-500/5 rounded-xl border border-green-500/10">
-                <input type="checkbox" id="lead-suhai-check" checked={distribuirForm.suhai || false} onChange={e => setDistribuirForm({...distribuirForm, suhai: e.target.checked})} className="w-5 h-5 rounded border-gray-800 bg-gray-900 checked:bg-green-500" />
-                <label htmlFor="lead-suhai-check" className="text-[11px] font-black uppercase text-green-500 cursor-pointer">Marcar como Lead Suhai</label>
+              <div className="space-y-2">
+                <label className="text-[10px] font-black uppercase text-gray-500">ATRIBUIR AO VENDEDOR</label>
+                <select 
+                  className="w-full bg-[#0b0f1a] border border-gray-800 p-6 rounded-2xl text-white uppercase outline-none focus:border-yellow-500 transition-all appearance-none" 
+                  value={distribuirForm.vendedor || ''} 
+                  onChange={e => setDistribuirForm({...distribuirForm, vendedor: e.target.value})}
+                >
+                  <option value="">SELECIONE UM VENDEDOR</option>
+                  {Array.from(new Set([...usuarios.map(u => u.nome), 'ELEN JACONIS'])).map(nome => (
+                    <option key={nome} value={nome}>{nome}</option>
+                  ))}
+                </select>
               </div>
-              <textarea className="w-full bg-[#0b0f1a] border border-gray-800 p-6 rounded-2xl text-white outline-none focus:border-yellow-500 h-32 resize-none" placeholder="NOTAS ADICIONAIS..." value={distribuirForm.info} onChange={e => setDistribuirForm({...distribuirForm, info: e.target.value})}></textarea>
+              <div className="flex items-center gap-3 p-4 bg-green-500/5 rounded-2xl border border-green-500/10">
+                <input 
+                  type="checkbox" 
+                  id="lead-suhai-check" 
+                  checked={distribuirForm.suhai || false} 
+                  onChange={e => setDistribuirForm({...distribuirForm, suhai: e.target.checked})} 
+                  className="w-5 h-5 rounded border-gray-800 bg-gray-900 checked:bg-green-500" 
+                />
+                <label htmlFor="lead-suhai-check" className="text-[11px] font-black uppercase text-green-500 cursor-pointer select-none">Marcar como Lead Suhai</label>
+              </div>
+              <div className="space-y-2">
+                <label className="text-[10px] font-black uppercase text-gray-500">OBSERVAÇÕES ADICIONAIS</label>
+                <textarea 
+                  className="w-full bg-[#0b0f1a] border border-gray-800 p-6 rounded-2xl text-white outline-none focus:border-yellow-500 h-32 resize-none transition-all" 
+                  placeholder="EX: CLIENTE INDICADO POR AMIGO..." 
+                  value={distribuirForm.info || ''} 
+                  onChange={e => setDistribuirForm({...distribuirForm, info: e.target.value})}
+                />
+              </div>
             </div>
-            <button onClick={async () => { if (!distribuirForm.cliente || !distribuirForm.vendedor) return alert("Preencha o nome do cliente e o vendedor."); await cloud.salvarIndicacao(distribuirForm as Indicacao); alert("Lead distribuído com sucesso!"); setDistribuirForm({ status: 'NOVA INDICAÇÃO', suhai: false, info: '', cliente: '', tel: '', veiculo: '', vendedor: '' }); }} className="w-full bg-yellow-500 text-black p-6 rounded-3xl font-black uppercase text-xs active:scale-95 transition-all">CONFIRMAR ENVIO</button>
+            <button 
+              onClick={async () => { 
+                if (!distribuirForm.cliente || !distribuirForm.vendedor) return alert("Erro: Cliente e Vendedor são obrigatórios."); 
+                await cloud.salvarIndicacao(distribuirForm as Indicacao); 
+                alert("Sucesso: Lead distribuído para a equipe!"); 
+                setDistribuirForm({ status: 'NOVA INDICAÇÃO', suhai: false, info: '', cliente: '', tel: '', veiculo: '', vendedor: '' }); 
+              }} 
+              className="w-full bg-yellow-500 text-black p-6 rounded-3xl font-black uppercase text-xs active:scale-95 transition-all shadow-xl shadow-yellow-500/10"
+            >
+              CONFIRMAR ENVIO DO LEAD
+            </button>
           </div>
         </div>
       )}
 
-      {/* MODALS */}
+      {/* MODAIS */}
       {modalType === 'venda' && (
         <ModalWrapper title="GERENCIAR PRODUÇÃO" onClose={() => setModalType(null)} onSave={async () => { await cloud.salvarVenda(editingItem); setModalType(null); }}>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            <div className="space-y-2 col-span-2"><label className="text-[9px] font-black uppercase text-gray-500">CLIENTE</label><input className="w-full bg-[#0b0f1a] border border-gray-800 p-4 rounded-xl text-white outline-none focus:border-blue-500" value={editingItem?.cliente || ''} onChange={e => setEditingItem({...editingItem, cliente: e.target.value.toUpperCase()})} /></div>
-            <div className="space-y-2"><label className="text-[9px] font-black uppercase text-gray-500">WHATSAPP</label><input className="w-full bg-[#0b0f1a] border border-gray-800 p-4 rounded-xl text-white outline-none focus:border-blue-500" value={editingItem?.tel || ''} onChange={e => setEditingItem({...editingItem, tel: e.target.value})} /></div>
-            <div className="space-y-2"><label className="text-[9px] font-black uppercase text-gray-500">SEGURADORA</label><select className="w-full bg-[#0b0f1a] border border-gray-800 p-4 rounded-xl text-white outline-none focus:border-blue-500" value={editingItem?.empresa || ''} onChange={e => setEditingItem({...editingItem, empresa: e.target.value})}>{empresas.map(emp => <option key={emp.id} value={emp.nome}>{emp.nome}</option>)}</select></div>
-            <div className="space-y-2"><label className="text-[9px] font-black uppercase text-gray-500">PRÊMIO LÍQUIDO</label><input type="number" className="w-full bg-[#0b0f1a] border border-gray-800 p-4 rounded-xl text-white outline-none focus:border-blue-500" value={editingItem?.valor || 0} onChange={e => setEditingItem({...editingItem, valor: Number(e.target.value)})} /></div>
-            <div className="space-y-2"><label className="text-[9px] font-black uppercase text-gray-500">COMISSÃO CHEIA</label><input type="number" className="w-full bg-[#0b0f1a] border border-gray-800 p-4 rounded-xl text-white outline-none focus:border-blue-500" value={editingItem?.comissao_cheia || 0} onChange={e => setEditingItem({...editingItem, comissao_cheia: Number(e.target.value)})} /></div>
-            <div className="space-y-2"><label className="text-[9px] font-black uppercase text-gray-500">SUA PARTE</label><input type="number" className="w-full bg-[#0b0f1a] border border-gray-800 p-4 rounded-xl text-white outline-none focus:border-blue-500" value={editingItem?.comissao_vendedor || 0} onChange={e => setEditingItem({...editingItem, comissao_vendedor: Number(e.target.value)})} /></div>
-            <div className="space-y-2"><label className="text-[9px] font-black uppercase text-gray-500">VENDEDOR</label><select className="w-full bg-[#0b0f1a] border border-gray-800 p-4 rounded-xl text-white outline-none focus:border-blue-500" value={editingItem?.vendedor || ''} onChange={e => setEditingItem({...editingItem, vendedor: e.target.value})}>{Array.from(new Set([...usuarios.map(u => u.nome), 'ELEN JACONIS'])).map(nome => <option key={nome} value={nome}>{nome}</option>)}</select></div>
-            <div className="space-y-2"><label className="text-[9px] font-black uppercase text-gray-500">STATUS</label><select className="w-full bg-[#0b0f1a] border border-gray-800 p-4 rounded-xl text-white outline-none focus:border-blue-500" value={editingItem?.status || 'Fazer Vistoria'} onChange={e => setEditingItem({...editingItem, status: e.target.value})}>{VENDA_STATUS_MAP.map(s => <option key={s} value={s}>{s}</option>)}</select></div>
-            <div className="flex items-center gap-2 pt-4"><input type="checkbox" checked={editingItem?.suhai || false} onChange={e => setEditingItem({...editingItem, suhai: e.target.checked})} className="w-4 h-4" /><label className="text-[10px] font-black uppercase text-gray-400">É LEAD SUHAI?</label></div>
+            <div className="space-y-2 col-span-2"><label className="text-[9px] font-black uppercase text-gray-500">CLIENTE</label><input className="w-full bg-[#0b0f1a] border border-gray-800 p-4 rounded-xl text-white outline-none" value={editingItem?.cliente || ''} onChange={e => setEditingItem({...editingItem, cliente: e.target.value.toUpperCase()})} /></div>
+            <div className="space-y-2"><label className="text-[9px] font-black uppercase text-gray-500">VENDEDOR</label><select className="w-full bg-[#0b0f1a] border border-gray-800 p-4 rounded-xl text-white font-bold uppercase" value={editingItem?.vendedor || ''} onChange={e => setEditingItem({...editingItem, vendedor: e.target.value})}>{Array.from(new Set([...usuarios.map(u => u.nome), 'ELEN JACONIS'])).map(nome => <option key={nome} value={nome}>{nome}</option>)}</select></div>
+            <div className="space-y-2"><label className="text-[9px] font-black uppercase text-gray-500">VALOR PRÊMIO</label><input type="number" className="w-full bg-[#0b0f1a] border border-gray-800 p-4 rounded-xl text-white" value={editingItem?.valor || 0} onChange={e => setEditingItem({...editingItem, valor: Number(e.target.value)})} /></div>
+            <div className="space-y-2"><label className="text-[9px] font-black uppercase text-gray-500">C. CHEIA</label><input type="number" className="w-full bg-[#0b0f1a] border border-gray-800 p-4 rounded-xl text-white font-bold" value={editingItem?.comissao_cheia || 0} onChange={e => setEditingItem({...editingItem, comissao_cheia: Number(e.target.value)})} /></div>
+            <div className="space-y-2"><label className="text-[9px] font-black uppercase text-gray-500">PARTE VENDEDOR</label><input type="number" className="w-full bg-[#0b0f1a] border border-gray-800 p-4 rounded-xl text-white font-bold" value={editingItem?.comissao_vendedor || 0} onChange={e => setEditingItem({...editingItem, comissao_vendedor: Number(e.target.value)})} /></div>
+            <div className="space-y-2"><label className="text-[9px] font-black uppercase text-gray-500">SEGURADORA</label><select className="w-full bg-[#0b0f1a] border border-gray-800 p-4 rounded-xl text-white" value={editingItem?.empresa || ''} onChange={e => setEditingItem({...editingItem, empresa: e.target.value})}>{empresas.map(emp => <option key={emp.id} value={emp.nome}>{emp.nome}</option>)}</select></div>
           </div>
         </ModalWrapper>
       )}
@@ -578,11 +673,11 @@ const App: React.FC = () => {
       {modalType === 'usuario' && (
         <ModalWrapper title="CONFIGURAR USUÁRIO" onClose={() => setModalType(null)} onSave={async () => { await cloud.salvarUsuario(editingItem); setModalType(null); }}>
           <div className="space-y-6">
-            <div className="space-y-2"><label className="text-[9px] font-black uppercase text-gray-500">NOME</label><input className="w-full bg-[#0b0f1a] border border-gray-800 p-4 rounded-xl text-[11px] font-bold text-white" value={editingItem?.nome || ''} onChange={e => setEditingItem({...editingItem, nome: e.target.value.toUpperCase()})} /></div>
-            <div className="space-y-2"><label className="text-[9px] font-black uppercase text-gray-500">LOGIN</label><input className="w-full bg-[#0b0f1a] border border-gray-800 p-4 rounded-xl text-[11px] font-bold text-white" value={editingItem?.login || ''} onChange={e => setEditingItem({...editingItem, login: e.target.value})} /></div>
-            <div className="space-y-2"><label className="text-[9px] font-black uppercase text-gray-500">SENHA</label><input className="w-full bg-[#0b0f1a] border border-gray-800 p-4 rounded-xl text-[11px] font-bold text-white" value={editingItem?.senha || ''} onChange={e => setEditingItem({...editingItem, senha: e.target.value})} /></div>
-            <div className="space-y-2"><label className="text-[9px] font-black uppercase text-gray-500">SETOR</label><select className="w-full bg-[#0b0f1a] border border-gray-800 p-4 rounded-xl text-[11px] font-bold text-white uppercase" value={editingItem?.setor || 'VENDEDOR'} onChange={e => setEditingItem({...editingItem, setor: e.target.value})}><option value="VENDEDOR">VENDEDOR</option><option value="ADMIN">ADMIN</option></select></div>
-            <div className="space-y-2"><label className="text-[9px] font-black uppercase text-gray-500">COMISSÃO (%)</label><input type="number" className="w-full bg-[#0b0f1a] border border-gray-800 p-4 rounded-xl text-[11px] font-bold text-white" value={editingItem?.comissao || 0} onChange={e => setEditingItem({...editingItem, comissao: Number(e.target.value)})} /></div>
+            <div className="space-y-2"><label className="text-[9px] font-black uppercase text-gray-500">NOME COMPLETO</label><input className="w-full bg-[#0b0f1a] border border-gray-800 p-4 rounded-xl text-white font-bold uppercase" value={editingItem?.nome || ''} onChange={e => setEditingItem({...editingItem, nome: e.target.value.toUpperCase()})} /></div>
+            <div className="space-y-2"><label className="text-[9px] font-black uppercase text-gray-500">LOGIN</label><input className="w-full bg-[#0b0f1a] border border-gray-800 p-4 rounded-xl text-white" value={editingItem?.login || ''} onChange={e => setEditingItem({...editingItem, login: e.target.value})} /></div>
+            <div className="space-y-2"><label className="text-[9px] font-black uppercase text-gray-500">SENHA</label><input type="password" className="w-full bg-[#0b0f1a] border border-gray-800 p-4 rounded-xl text-white" value={editingItem?.senha || ''} onChange={e => setEditingItem({...editingItem, senha: e.target.value})} /></div>
+            <div className="space-y-2"><label className="text-[9px] font-black uppercase text-gray-500">SETOR</label><select className="w-full bg-[#0b0f1a] border border-gray-800 p-4 rounded-xl text-white" value={editingItem?.setor || 'VENDEDOR'} onChange={e => setEditingItem({...editingItem, setor: e.target.value})}><option value="VENDEDOR">VENDEDOR</option><option value="ADMIN">ADMIN</option></select></div>
+            <div className="space-y-2"><label className="text-[9px] font-black uppercase text-gray-500">COMISSÃO (%)</label><input type="number" className="w-full bg-[#0b0f1a] border border-gray-800 p-4 rounded-xl text-white" value={editingItem?.comissao || 0} onChange={e => setEditingItem({...editingItem, comissao: Number(e.target.value)})} /></div>
           </div>
         </ModalWrapper>
       )}
@@ -590,16 +685,16 @@ const App: React.FC = () => {
       {modalType === 'meta' && (
         <ModalWrapper title="CONFIGURAR META" onClose={() => setModalType(null)} onSave={async () => { await cloud.salvarMeta(editingItem); setModalType(null); }}>
           <div className="space-y-6">
-            <div className="space-y-2"><label className="text-[9px] font-black uppercase text-gray-500">META SALARIAL / COMISSÃO (R$)</label><input type="number" className="w-full bg-[#0b0f1a] border border-gray-800 p-4 rounded-xl text-white outline-none" value={editingItem?.meta_salario || 0} onChange={e => setEditingItem({...editingItem, meta_salario: Number(e.target.value)})} /></div>
-            <div className="space-y-2"><label className="text-[9px] font-black uppercase text-gray-500">META PRÊMIO BRUTO (R$)</label><input type="number" className="w-full bg-[#0b0f1a] border border-gray-800 p-4 rounded-xl text-white outline-none" value={editingItem?.meta_premio || 0} onChange={e => setEditingItem({...editingItem, meta_premio: Number(e.target.value)})} /></div>
-            <div className="space-y-2"><label className="text-[9px] font-black uppercase text-gray-500">META QUANTIDADE (UNIDADES)</label><input type="number" className="w-full bg-[#0b0f1a] border border-gray-800 p-4 rounded-xl text-white outline-none" value={editingItem?.meta_qtd || 0} onChange={e => setEditingItem({...editingItem, meta_qtd: Number(e.target.value)})} /></div>
+            <div className="space-y-2"><label className="text-[9px] font-black uppercase text-gray-500">META SALARIAL (R$)</label><input type="number" className="w-full bg-[#0b0f1a] border border-gray-800 p-4 rounded-xl text-white" value={editingItem?.meta_salario || 0} onChange={e => setEditingItem({...editingItem, meta_salario: Number(e.target.value)})} /></div>
+            <div className="space-y-2"><label className="text-[9px] font-black uppercase text-gray-500">META PRÊMIO (R$)</label><input type="number" className="w-full bg-[#0b0f1a] border border-gray-800 p-4 rounded-xl text-white" value={editingItem?.meta_premio || 0} onChange={e => setEditingItem({...editingItem, meta_premio: Number(e.target.value)})} /></div>
+            <div className="space-y-2"><label className="text-[9px] font-black uppercase text-gray-500">META QUANTIDADE</label><input type="number" className="w-full bg-[#0b0f1a] border border-gray-800 p-4 rounded-xl text-white" value={editingItem?.meta_qtd || 0} onChange={e => setEditingItem({...editingItem, meta_qtd: Number(e.target.value)})} /></div>
           </div>
         </ModalWrapper>
       )}
 
       {modalType === 'empresa' && (
-        <ModalWrapper title="SEGURADORA" onClose={() => setModalType(null)} onSave={async () => { await cloud.salvarEmpresa(editingItem); setModalType(null); }}>
-          <input className="w-full bg-[#0b0f1a] border border-gray-800 p-5 rounded-2xl text-white uppercase outline-none focus:border-blue-500" value={editingItem?.nome || ''} onChange={e => setEditingItem({...editingItem, nome: e.target.value.toUpperCase()})} />
+        <ModalWrapper title="NOVA SEGURADORA" onClose={() => setModalType(null)} onSave={async () => { await cloud.salvarEmpresa(editingItem); setModalType(null); }}>
+          <div className="space-y-2"><label className="text-[9px] font-black uppercase text-gray-500">NOME DA EMPRESA</label><input className="w-full bg-[#0b0f1a] border border-gray-800 p-4 rounded-xl text-white uppercase" value={editingItem?.nome || ''} onChange={e => setEditingItem({...editingItem, nome: e.target.value.toUpperCase()})} /></div>
         </ModalWrapper>
       )}
     </Layout>
