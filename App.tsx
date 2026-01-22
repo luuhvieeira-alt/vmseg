@@ -5,6 +5,430 @@ import { cloud } from './services/firebase';
 import { FORMAT_BRL, INDICACAO_STATUS_MAP, VENDA_STATUS_MAP } from './constants';
 import Layout from './components/Layout';
 
+// --- COMPONENTES DE APOIO (FORA DO APP PARA EVITAR PERDA DE FOCO) ---
+
+const ModalWrapper: React.FC<{ 
+  title: string; 
+  onClose: () => void; 
+  onSave: () => void; 
+  children: React.ReactNode;
+}> = ({ title, onClose, onSave, children }) => (
+  <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-[200] flex items-center justify-center p-4 animate-in fade-in duration-300">
+    <div className="bg-[#111827] w-full max-w-2xl rounded-[3rem] border border-gray-800 shadow-2xl overflow-hidden flex flex-col">
+      <div className="p-10 border-b border-gray-800 flex justify-between items-center">
+        <h3 className="text-xl font-black uppercase text-white tracking-tighter">{title}</h3>
+        <button onClick={onClose} className="text-gray-500 hover:text-white transition"><i className="fas fa-times text-xl"></i></button>
+      </div>
+      <div className="p-10 overflow-y-auto scrollbar-thin max-h-[60vh]">
+        {children}
+      </div>
+      <div className="p-10 border-t border-gray-800 flex gap-4">
+        <button onClick={onClose} className="flex-1 bg-gray-800 hover:bg-gray-700 text-white p-5 rounded-2xl font-black uppercase text-[10px] transition-all">Cancelar</button>
+        <button onClick={onSave} className="flex-1 bg-blue-600 hover:bg-blue-500 text-white p-5 rounded-2xl font-black uppercase text-[10px] shadow-lg shadow-blue-900/20 transition-all">Salvar</button>
+      </div>
+    </div>
+  </div>
+);
+
+const DashboardView: React.FC<{ 
+  vendas: Venda[], 
+  indicacoes: Indicacao[], 
+  metas: Meta[], 
+  user: AuthUser | null 
+}> = ({ vendas, indicacoes, metas, user }) => {
+  const stats = useMemo(() => {
+    const now = new Date();
+    const startOfDay = new Date().setHours(0, 0, 0, 0);
+    const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1).getTime();
+    
+    // Base de vendas (todas vs individual)
+    const baseVendas = (user?.isAdmin ? vendas : vendas.filter(v => v.vendedor === user?.nome));
+    
+    // Filtros de tempo
+    const hojeVendas = baseVendas.filter(v => v.dataCriacao >= startOfDay);
+    const mesVendas = baseVendas.filter(v => v.dataCriacao >= startOfMonth);
+    
+    // Apenas pagas contam para metas e boxes do mês conforme solicitado
+    const mesPagas = mesVendas.filter(v => v.status === 'Pagamento Efetuado');
+    
+    // Metas
+    const companyMeta = metas.find(m => m.vendedor === 'EMPRESA_VM_SEGUROS') || { meta_qtd: 1, meta_premio: 1, meta_salario: 1 };
+    const userMeta = metas.find(m => m.vendedor === user?.nome) || { meta_qtd: 1, meta_premio: 1, meta_salario: 1 };
+    
+    // Totais (Day stats - Effor, Month stats - Result)
+    const vendasDia = hojeVendas.length;
+    const premioDia = hojeVendas.reduce((acc, v) => acc + Number(v.valor || 0), 0);
+    
+    const vendasMesPagasCount = mesPagas.length;
+    const premioMesPagas = mesPagas.reduce((acc, v) => acc + Number(v.valor || 0), 0);
+    
+    // Soma sincronizada com o financeiro (Comissão Cheia para Admin, Sua Parte para Vendedor)
+    const comissaoAcumulada = mesPagas.reduce((acc, v) => 
+      acc + Number(user?.isAdmin ? (v.comissao_cheia || 0) : (v.comissao_vendedor || 0)), 0
+    );
+
+    const funilVendas = VENDA_STATUS_MAP.map(status => {
+      const count = mesVendas.filter(v => v.status === status).length;
+      const total = mesVendas.length || 1;
+      return { status, count, pct: Math.round((count / total) * 100) };
+    });
+
+    return { 
+      vendasDia,
+      premioDia,
+      vendasMesPagasCount, 
+      premioMesPagas, 
+      comissaoAcumulada, 
+      companyMeta, 
+      userMeta, 
+      funilVendas
+    };
+  }, [vendas, metas, user]);
+
+  const metaRef = user?.isAdmin ? stats.companyMeta : stats.userMeta;
+  const salesPct = Math.min(Math.round((stats.vendasMesPagasCount / (metaRef.meta_qtd || 1)) * 100), 100);
+  const premioPct = Math.min(Math.round((stats.premioMesPagas / (metaRef.meta_premio || 1)) * 100), 100);
+  const comissaoPct = Math.min(Math.round((stats.comissaoAcumulada / (metaRef.meta_salario || 1)) * 100), 100);
+
+  return (
+    <div className="space-y-10 animate-in fade-in duration-500 max-w-[1600px] mx-auto">
+      <h2 className="text-4xl font-black uppercase text-white tracking-tighter">Cockpit Geral</h2>
+      
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+        <div className="bg-[#111827] p-8 rounded-[2rem] border border-gray-800 border-l-4 border-l-blue-500 shadow-xl">
+          <p className="text-gray-500 text-[10px] font-black uppercase mb-3">Vendas do Dia</p>
+          <h3 className="text-6xl font-black text-white">{stats.vendasDia}</h3>
+        </div>
+        <div className="bg-[#111827] p-8 rounded-[2rem] border border-gray-800 border-l-4 border-l-green-500 shadow-xl">
+          <p className="text-gray-500 text-[10px] font-black uppercase mb-3">Prêmio do Dia</p>
+          <h3 className="text-4xl font-black text-green-500 font-mono">{FORMAT_BRL(stats.premioDia)}</h3>
+        </div>
+        <div className="bg-[#111827] p-8 rounded-[2rem] border border-gray-800 border-l-4 border-l-yellow-600 shadow-xl">
+          <p className="text-gray-500 text-[10px] font-black uppercase mb-3">Vendas (Mês Pago)</p>
+          <h3 className="text-6xl font-black text-white">{stats.vendasMesPagasCount}</h3>
+        </div>
+        <div className="bg-[#111827] p-8 rounded-[2rem] border border-gray-800 border-l-4 border-l-white shadow-xl">
+          <p className="text-gray-500 text-[10px] font-black uppercase mb-3">Prêmio Líquido (Mês Pago)</p>
+          <h3 className="text-4xl font-black text-white font-mono">{FORMAT_BRL(stats.premioMesPagas)}</h3>
+        </div>
+      </div>
+
+      {/* Caixa de Performance Consolidada (Admin) ou Meta Individual (Vendedor) */}
+      <div className="bg-[#111827] p-10 rounded-[3rem] border border-gray-800 shadow-2xl relative overflow-hidden">
+        <div className="flex justify-between items-center mb-10">
+          <h3 className="text-xl font-black uppercase text-white flex items-center gap-3">
+            <i className="fas fa-chart-line text-purple-500"></i> {user?.isAdmin ? 'PERFORMANCE CONSOLIDADA (VM SEGUROS)' : 'SUA META INDIVIDUAL'}
+          </h3>
+        </div>
+        <div className="grid grid-cols-1 lg:grid-cols-4 gap-12 items-center">
+          <div className="space-y-3">
+            <p className="text-[9px] font-black text-gray-500 uppercase">PROGRESSO QUANTIDADE</p>
+            <h4 className="text-2xl font-black text-white">{stats.vendasMesPagasCount} <span className="text-gray-600">/ {metaRef.meta_qtd}</span></h4>
+            <div className="w-full bg-gray-900 h-2 rounded-full overflow-hidden">
+              <div className="bg-purple-500 h-full transition-all duration-1000" style={{ width: `${salesPct}%` }}></div>
+            </div>
+            <p className="text-right text-[10px] font-black text-purple-500">{salesPct}%</p>
+          </div>
+          <div className="space-y-3">
+            <p className="text-[9px] font-black text-gray-500 uppercase">PRÊMIO BRUTO PAGO</p>
+            <h4 className="text-2xl font-black text-white">{FORMAT_BRL(stats.premioMesPagas)}</h4>
+            <div className="w-full bg-gray-900 h-2 rounded-full overflow-hidden">
+              <div className="bg-green-500 h-full transition-all duration-1000" style={{ width: `${premioPct}%` }}></div>
+            </div>
+            <div className="flex justify-between">
+              <span className="text-[8px] font-black text-gray-600 uppercase">META: {FORMAT_BRL(metaRef.meta_premio)}</span>
+              <span className="text-[10px] font-black text-green-500">{premioPct}%</span>
+            </div>
+          </div>
+          <div className="space-y-3">
+            <p className="text-[9px] font-black text-gray-500 uppercase">COMISSÃO ACUMULADA</p>
+            <h4 className="text-2xl font-black text-white">{FORMAT_BRL(stats.comissaoAcumulada)}</h4>
+            <div className="w-full bg-gray-900 h-2 rounded-full overflow-hidden">
+              <div className="bg-yellow-500 h-full transition-all duration-1000" style={{ width: `${comissaoPct}%` }}></div>
+            </div>
+            <div className="flex justify-between">
+              <span className="text-[8px] font-black text-gray-600 uppercase">META: {FORMAT_BRL(metaRef.meta_salario)}</span>
+              <span className="text-[10px] font-black text-yellow-500">{comissaoPct}%</span>
+            </div>
+          </div>
+          <div className="flex justify-end pr-6 opacity-20">
+            <i className="fas fa-building text-gray-400 text-7xl"></i>
+          </div>
+        </div>
+      </div>
+
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+        <div className="bg-[#111827] p-10 rounded-[3rem] border border-gray-800 shadow-xl">
+          <h3 className="text-sm font-black text-white uppercase mb-8 flex items-center gap-3">
+            <i className="fas fa-chart-bar text-blue-500"></i> Funil de Produção (Mês)
+          </h3>
+          <div className="space-y-6">
+            {stats.funilVendas.map(f => (
+              <div key={f.status} className="space-y-2">
+                <div className="flex justify-between text-[10px] font-black uppercase">
+                  <span className="text-gray-500">{f.status}</span>
+                  <span className="text-white">{f.count} ({f.pct}%)</span>
+                </div>
+                <div className="w-full bg-gray-900 h-1.5 rounded-full overflow-hidden">
+                  <div className="bg-blue-600 h-full transition-all duration-700" style={{ width: `${f.pct}%` }}></div>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+        <div className="bg-[#111827] p-10 rounded-[3rem] border border-gray-800 shadow-xl flex flex-col justify-center items-center text-center">
+           <i className="fas fa-shield-alt text-6xl text-gray-800 mb-6"></i>
+           <h3 className="text-lg font-black text-white uppercase tracking-widest">VM SEGUROS</h3>
+           <p className="text-xs text-gray-500 font-bold uppercase mt-2">Proteção e Confiança</p>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+const FinanceiroView: React.FC<{ vendas: Venda[], user: AuthUser | null }> = ({ vendas, user }) => {
+  const list = useMemo(() => {
+    const base = user?.isAdmin ? vendas : vendas.filter(v => v.vendedor === user?.nome);
+    return base.filter(v => v.status === 'Pagamento Efetuado').sort((a, b) => b.dataCriacao - a.dataCriacao);
+  }, [vendas, user]);
+
+  const total = useMemo(() => {
+    return list.reduce((acc, v) => acc + (user?.isAdmin ? Number(v.comissao_cheia || 0) : Number(v.comissao_vendedor || 0)), 0);
+  }, [list, user]);
+
+  return (
+    <div className="space-y-10 animate-in fade-in duration-500 max-w-[1600px] mx-auto">
+      <h2 className="text-4xl font-black uppercase text-[#10b981] tracking-tighter">FINANCEIRO</h2>
+      <div className="bg-[#111827] rounded-[3.5rem] p-16 border border-gray-800 shadow-2xl flex flex-col items-center justify-center space-y-4">
+        <p className="text-[10px] font-black uppercase text-gray-500 tracking-[0.3em]">{user?.isAdmin ? 'TOTAL COMISSÃO CHEIA' : 'TOTAL SUA PARTE'}</p>
+        <h1 className="text-8xl font-black text-[#10b981] tracking-tighter drop-shadow-[0_0_20px_rgba(16,185,129,0.2)]">{FORMAT_BRL(total)}</h1>
+      </div>
+      <div className="bg-[#111827] rounded-[3rem] border border-gray-800 overflow-hidden shadow-xl">
+        <table className="w-full text-left border-collapse">
+          <thead className="bg-[#0b0f1a]/50 text-[10px] font-black uppercase text-gray-500 tracking-widest">
+            <tr>
+              <th className="px-10 py-8 border-b border-gray-800/50">Data</th>
+              <th className="px-10 py-8 border-b border-gray-800/50">Cliente</th>
+              <th className="px-10 py-8 border-b border-gray-800/50">Prêmio</th>
+              <th className="px-10 py-8 border-b border-gray-800/50">Comissão</th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-gray-800/40">
+            {list.map(v => (
+              <tr key={v.id} className="text-sm text-white hover:bg-white/5 transition-all">
+                <td className="px-10 py-6 text-[11px] font-bold text-gray-500">{new Date(v.dataCriacao).toLocaleDateString('pt-BR')}</td>
+                <td className="px-10 py-6 font-black uppercase tracking-tight">{v.cliente}</td>
+                <td className="px-10 py-6 font-bold text-gray-400">{FORMAT_BRL(v.valor)}</td>
+                <td className="px-10 py-6 font-black text-[#10b981]">{FORMAT_BRL(user?.isAdmin ? v.comissao_cheia : v.comissao_vendedor)}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+};
+
+const PerformanceView: React.FC<{
+  vendas: Venda[],
+  usuarios: User[],
+  onDeleteSalesmanSales: (nome: string) => void
+}> = ({ vendas, usuarios, onDeleteSalesmanSales }) => {
+  const stats = useMemo(() => {
+    const now = new Date();
+    const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1).getTime();
+    const mesVendas = vendas.filter(v => v.dataCriacao >= startOfMonth);
+
+    const globalPorEmpresa: Record<string, number> = {};
+    mesVendas.forEach(v => {
+      let emp = (v.empresa || 'SUHAI SEGURADORA').toUpperCase();
+      if (emp.includes('SUHAI')) emp = 'SUHAI SEGURADORA';
+      globalPorEmpresa[emp] = (globalPorEmpresa[emp] || 0) + 1;
+    });
+
+    const vendedorasBase = ['ANA BEATRIZ', 'IGOR VICENTE', 'LUANA VIERA', 'ELEN JACONIS'];
+    const todosVendedores = Array.from(new Set([
+      ...usuarios.filter(u => u.setor === 'VENDEDOR').map(u => u.nome),
+      ...vendas.map(v => v.vendedor),
+      ...vendedorasBase
+    ])).filter(Boolean);
+
+    const performanceVendedores = todosVendedores.map(nome => {
+      const vVendedor = mesVendas.filter(v => v.vendedor === nome);
+      const quebraEmpresa: Record<string, number> = {};
+      vVendedor.forEach(v => {
+        let emp = (v.empresa || 'SUHAI SEGURADORA').toUpperCase();
+        if (emp.includes('SUHAI')) emp = 'SUHAI SEGURADORA';
+        quebraEmpresa[emp] = (quebraEmpresa[emp] || 0) + 1;
+      });
+      return {
+        nome,
+        total: vVendedor.length,
+        quebra: Object.entries(quebraEmpresa).map(([label, val]) => ({ label, val })),
+        cProduzida: vVendedor.reduce((acc, v) => acc + Number(v.comissao_vendedor || 0), 0),
+        premioProduzido: vVendedor.reduce((acc, v) => acc + Number(v.valor || 0), 0)
+      };
+    }).filter(v => v.total > 0 || vendedorasBase.includes(v.nome));
+
+    return {
+      global: Object.entries(globalPorEmpresa).map(([label, val]) => ({ label, val })),
+      vendedores: performanceVendedores
+    };
+  }, [vendas, usuarios]);
+
+  return (
+    <div className="space-y-12 animate-in fade-in duration-500 max-w-[1600px] mx-auto">
+      <h2 className="text-4xl font-black uppercase text-purple-500 tracking-tighter">PERFORMANCE TEAM</h2>
+      <div className="bg-[#111827] p-10 rounded-[3rem] border border-gray-800 shadow-2xl">
+         <h3 className="text-[11px] font-black uppercase text-white mb-10 flex items-center gap-4">
+           <i className="fas fa-building text-purple-500"></i> PRODUÇÃO GLOBAL POR SEGURADORA (MÊS)
+         </h3>
+         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
+            {stats.global.map(g => (
+              <div key={g.label} className="bg-[#0b0f1a] p-8 rounded-[2rem] border border-gray-800/50 flex flex-col items-center justify-center text-center">
+                 <p className="text-[8px] font-black text-gray-500 uppercase mb-2">{g.label}</p>
+                 <h4 className="text-5xl font-black text-white">{g.val}</h4>
+                 <p className="text-[8px] font-black text-gray-700 uppercase mt-2">APÓLICES EM PRODUÇÃO</p>
+              </div>
+            ))}
+         </div>
+      </div>
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-10">
+        {stats.vendedores.map(v => (
+          <div key={v.nome} className="bg-[#111827] rounded-[3.5rem] p-10 border border-gray-800 shadow-2xl relative group overflow-hidden">
+             <div className="absolute top-0 left-1/2 -translate-x-1/2 w-1/2 h-1 bg-purple-500 rounded-b-full shadow-[0_0_15px_rgba(168,85,247,0.5)]"></div>
+             <button 
+                onClick={() => onDeleteSalesmanSales(v.nome)}
+                className="absolute top-6 right-6 text-red-500/20 hover:text-red-500 transition-all z-10"
+                title="Limpar produção deste vendedor"
+             >
+                <i className="fas fa-trash-alt text-sm"></i>
+             </button>
+             <div className="text-center mb-10">
+               <h3 className="text-xl font-black uppercase text-white tracking-tighter mb-8">{v.nome}</h3>
+               <div className="bg-[#0b0f1a] p-8 rounded-[2.5rem] border border-gray-800/50 mb-8">
+                  <p className="text-[8px] font-black text-gray-500 uppercase mb-1">PRODUÇÃO REAL (MÊS)</p>
+                  <h4 className="text-6xl font-black text-white">{v.total}</h4>
+               </div>
+               <div className="space-y-4 text-left">
+                  <p className="text-[8px] font-black text-gray-600 uppercase tracking-widest border-b border-gray-800 pb-2">QUEBRA POR EMPRESA</p>
+                  <div className="grid grid-cols-2 gap-x-6 gap-y-2">
+                    {v.quebra.map(q => (
+                      <div key={q.label} className="flex justify-between items-center">
+                        <span className="text-[9px] font-black text-gray-500 uppercase">{q.label}</span>
+                        <span className="text-[10px] font-black text-purple-400">{q.val}</span>
+                      </div>
+                    ))}
+                  </div>
+               </div>
+             </div>
+             <div className="grid grid-cols-2 gap-4">
+                <div className="bg-[#0b0f1a] p-5 rounded-3xl border border-gray-800/50 text-center">
+                  <p className="text-[7px] font-black text-green-500 uppercase mb-1">C. PRODUZIDA</p>
+                  <p className="text-[11px] font-black text-white">{FORMAT_BRL(v.cProduzida)}</p>
+                </div>
+                <div className="bg-[#0b0f1a] p-5 rounded-3xl border border-gray-800/50 text-center">
+                  <p className="text-[7px] font-black text-blue-500 uppercase mb-1">PRÊMIO PRODUZIDO</p>
+                  <p className="text-[11px] font-black text-white">{FORMAT_BRL(v.premioProduzido)}</p>
+                </div>
+             </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+};
+
+const MetasView: React.FC<{ metas: Meta[], usuarios: User[], onEdit: (m: Partial<Meta>) => void }> = ({ metas, usuarios, onEdit }) => {
+  const metaEmpresa = metas.find(m => m.vendedor === 'EMPRESA_VM_SEGUROS') || { vendedor: 'EMPRESA_VM_SEGUROS', meta_qtd: 0, meta_premio: 0, meta_salario: 0 };
+  return (
+    <div className="space-y-12 animate-in fade-in duration-500 max-w-[1600px] mx-auto">
+      <h2 className="text-4xl font-black uppercase text-blue-400 tracking-tighter">METAS DOS VENDEDORES</h2>
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
+        {usuarios.filter(u => u.setor === 'VENDEDOR' || u.nome === 'ELEN JACONIS').map(u => {
+          const meta = metas.find(m => m.vendedor === u.nome) || { vendedor: u.nome, meta_qtd: 0, meta_premio: 0, meta_salario: 0 };
+          return (
+            <div key={u.id || u.nome} className="bg-[#111827] p-10 rounded-[2.5rem] border border-gray-800 shadow-xl relative group">
+              <button onClick={() => onEdit(meta)} className="absolute top-8 right-8 text-gray-600 hover:text-white transition opacity-0 group-hover:opacity-100"><i className="fas fa-edit text-xs"></i></button>
+              <h3 className="text-xl font-black uppercase text-blue-400 mb-8 tracking-tight">{u.nome}</h3>
+              <div className="space-y-4">
+                <div className="flex justify-between items-center"><span className="text-[9px] font-black uppercase text-gray-500 tracking-widest">META SALARIAL</span><span className="text-xs font-black text-white">{FORMAT_BRL(meta.meta_salario)}</span></div>
+                <div className="flex justify-between items-center"><span className="text-[9px] font-black uppercase text-gray-500 tracking-widest">META PRÊMIO</span><span className="text-xs font-black text-white">{FORMAT_BRL(meta.meta_premio)}</span></div>
+                <div className="flex justify-between items-center"><span className="text-[9px] font-black uppercase text-gray-500 tracking-widest">QUANTIDADE</span><span className="text-xs font-black text-white">{meta.meta_qtd}</span></div>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+      <h2 className="text-4xl font-black uppercase text-purple-400 tracking-tighter mt-20">META DA EMPRESA (VM SEGUROS)</h2>
+      <div className="bg-[#111827] p-16 rounded-[3.5rem] border border-gray-800 border-dashed border-2 shadow-2xl relative max-w-2xl overflow-hidden group">
+         <div className="absolute top-0 right-0 p-12 opacity-5"><i className="fas fa-bullseye text-[12rem] text-gray-400"></i></div>
+         <button onClick={() => onEdit(metaEmpresa)} className="absolute top-10 right-10 text-purple-400 hover:text-white transition"><i className="fas fa-edit text-lg"></i></button>
+         <div className="text-center mb-12"><p className="text-[9px] font-black uppercase text-gray-500 tracking-[0.5em] mb-2">OBJETIVOS GLOBAIS MENSAIS</p><h3 className="text-3xl font-black uppercase text-white tracking-tighter">ESTRATÉGICO VM</h3></div>
+         <div className="space-y-10">
+            <div className="flex justify-between items-center"><span className="text-[10px] font-black uppercase text-gray-500 tracking-widest">META PRÊMIO</span><span className="text-2xl font-black text-white tracking-tight">{FORMAT_BRL(metaEmpresa.meta_premio)}</span></div>
+            <div className="flex justify-between items-center"><span className="text-[10px] font-black uppercase text-gray-500 tracking-widest">META VENDAS</span><span className="text-2xl font-black text-white tracking-tight">{metaEmpresa.meta_qtd} UNI</span></div>
+            <div className="flex justify-between items-center"><span className="text-[10px] font-black uppercase text-gray-500 tracking-widest">META COMISSÃO</span><span className="text-2xl font-black text-white tracking-tight">{FORMAT_BRL(metaEmpresa.meta_salario)}</span></div>
+         </div>
+      </div>
+    </div>
+  );
+};
+
+const LeadSuhaiView: React.FC<{ vendas: Venda[], user: AuthUser | null }> = ({ vendas, user }) => {
+  const list = useMemo(() => {
+    return vendas.filter(v => v.status === 'Pagamento Efetuado' && v.suhai).sort((a, b) => b.dataCriacao - a.dataCriacao);
+  }, [vendas]);
+
+  const stats = useMemo(() => {
+    const totalPremio = list.reduce((acc, v) => acc + Number(v.valor || 0), 0);
+    const totalComissao = list.reduce((acc, v) => acc + (user?.isAdmin ? Number(v.comissao_cheia || 0) : Number(v.comissao_vendedor || 0)), 0);
+    return { totalPremio, totalComissao };
+  }, [list, user]);
+
+  return (
+    <div className="space-y-10 animate-in fade-in duration-500 max-w-[1600px] mx-auto">
+      <h2 className="text-4xl font-black uppercase text-[#10b981] tracking-tighter">SUHAI GOLD - PAGOS</h2>
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+         <div className="bg-[#111827] p-10 rounded-[2.5rem] border border-[#10b981]/20 shadow-xl flex flex-col justify-center">
+           <p className="text-[9px] font-black uppercase text-gray-500 tracking-[0.3em] mb-2">COMISSÃO SUHAI</p>
+           <h3 className="text-6xl font-black text-[#10b981] tracking-tighter">{FORMAT_BRL(stats.totalComissao)}</h3>
+         </div>
+         <div className="bg-[#111827] p-10 rounded-[2.5rem] border border-blue-500/20 shadow-xl flex flex-col justify-center">
+           <p className="text-[9px] font-black uppercase text-gray-500 tracking-[0.3em] mb-2">PRÊMIO TOTAL</p>
+           <h3 className="text-6xl font-black text-[#3b82f6] tracking-tighter">{FORMAT_BRL(stats.totalPremio)}</h3>
+         </div>
+      </div>
+      <div className="bg-[#111827] rounded-[3rem] border border-gray-800 overflow-hidden shadow-xl">
+        <table className="w-full text-left border-collapse">
+          <thead className="bg-[#0b0f1a]/50 text-[10px] font-black uppercase text-gray-500 tracking-widest">
+            <tr>
+              <th className="px-10 py-8 border-b border-gray-800/50">Vendedor</th>
+              <th className="px-10 py-8 border-b border-gray-800/50">Cliente</th>
+              <th className="px-10 py-8 border-b border-gray-800/50">Prêmio</th>
+              <th className="px-10 py-8 border-b border-gray-800/50">Comissão</th>
+              <th className="px-10 py-8 border-b border-gray-800/50 text-center">Status</th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-gray-800/40">
+            {list.map(v => (
+              <tr key={v.id} className="text-sm text-white hover:bg-white/5 transition-all">
+                <td className="px-10 py-6 font-bold text-blue-400 uppercase text-[11px]">{v.vendedor}</td>
+                <td className="px-10 py-6 font-black uppercase tracking-tight">{v.cliente}</td>
+                <td className="px-10 py-6 font-bold text-gray-400">{FORMAT_BRL(v.valor)}</td>
+                <td className="px-10 py-6 font-black text-[#10b981]">{FORMAT_BRL(user?.isAdmin ? v.comissao_cheia : v.comissao_vendedor)}</td>
+                <td className="px-10 py-6 text-center"><span className="bg-green-500/10 text-green-500 text-[8px] font-black px-4 py-1.5 rounded-full border border-green-500/20 uppercase">PAGO</span></td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+};
+
+// --- APP PRINCIPAL ---
+
 const App: React.FC = () => {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [user, setUser] = useState<AuthUser | null>(null);
@@ -21,13 +445,18 @@ const App: React.FC = () => {
   const [indicacoes, setIndicacoes] = useState<Indicacao[]>([]);
   const [empresas, setEmpresas] = useState<Empresa[]>([]);
 
-  // Selection State for Bulk Actions
+  // Selection state
   const [selectedVendas, setSelectedVendas] = useState<string[]>([]);
-  const [selectedIndicacoes, setSelectedIndicacoes] = useState<string[]>([]);
+  const [selectedLeads, setSelectedLeads] = useState<string[]>([]);
 
-  // Modals
+  // UI State
   const [modalType, setModalType] = useState<'venda' | 'indicacao' | 'usuario' | 'empresa' | 'meta' | null>(null);
   const [editingItem, setEditingItem] = useState<any>(null);
+
+  // Form states
+  const [distribuirForm, setDistribuirForm] = useState<Partial<Indicacao>>({
+    status: 'NOVA INDICAÇÃO', suhai: false, info: '', cliente: '', tel: '', veiculo: '', vendedor: ''
+  });
 
   useEffect(() => {
     const unsubVendas = cloud.subscribeVendas(setVendas);
@@ -35,903 +464,80 @@ const App: React.FC = () => {
     const unsubMetas = cloud.subscribeMetas(setMetas);
     const unsubIndicacoes = cloud.subscribeIndicacoes(setIndicacoes);
     const unsubEmpresas = cloud.subscribeEmpresas(setEmpresas);
-
-    return () => {
-      unsubVendas();
-      unsubUsers();
-      unsubMetas();
-      unsubIndicacoes();
-      unsubEmpresas();
-    };
+    return () => { unsubVendas(); unsubUsers(); unsubMetas(); unsubIndicacoes(); unsubEmpresas(); };
   }, []);
 
   const handleLogin = () => {
     const uI = loginForm.username.trim().toLowerCase();
     const pI = loginForm.password.trim();
-
     if (uI === 'admin' && pI === 'admin123') {
-      const admin: AuthUser = { nome: 'ADMIN MASTER', setor: 'ADMIN', isAdmin: true, login: 'admin', comissao: 100 };
-      setUser(admin);
+      setUser({ nome: 'ADMIN MASTER', setor: 'ADMIN', isAdmin: true, login: 'admin', comissao: 100 });
       setIsAuthenticated(true);
     } else {
       const found = usuarios.find(u => (u.login || '').toLowerCase() === uI && u.senha === pI);
       if (found) {
-        const authUser: AuthUser = { ...found, isAdmin: found.setor === 'ADMIN' };
-        setUser(authUser);
+        setUser({ ...found, isAdmin: found.setor === 'ADMIN' });
         setIsAuthenticated(true);
-      } else {
-        alert('Credenciais inválidas');
-      }
+      } else { alert('Credenciais inválidas'); }
     }
   };
 
-  const logout = () => {
-    setIsAuthenticated(false);
-    setUser(null);
-    setLoginForm({ username: '', password: '' });
+  const logout = () => { setIsAuthenticated(false); setUser(null); setLoginForm({ username: '', password: '' }); };
+
+  const deleteSelectedVendas = async () => {
+    if (!window.confirm(`Deseja excluir as ${selectedVendas.length} apólices selecionadas?`)) return;
+    for (const id of selectedVendas) await cloud.apagar('vendas', id);
     setSelectedVendas([]);
-    setSelectedIndicacoes([]);
-    setSalesmanFilter('TODOS');
   };
 
-  // Funções de Movimentação Rápida
-  const moveVenda = async (item: Venda, direction: 'left' | 'right') => {
-    const currentIndex = VENDA_STATUS_MAP.indexOf(item.status);
-    const nextIndex = direction === 'right' ? currentIndex + 1 : currentIndex - 1;
-    if (nextIndex >= 0 && nextIndex < VENDA_STATUS_MAP.length) {
-      await cloud.updateStatus('vendas', item.id!, VENDA_STATUS_MAP[nextIndex]);
-    }
+  const deleteSelectedLeads = async () => {
+    if (!window.confirm(`Deseja excluir os ${selectedLeads.length} leads selecionados?`)) return;
+    for (const id of selectedLeads) await cloud.apagar('indicacoes', id);
+    setSelectedLeads([]);
   };
 
-  const moveIndicacao = async (item: Indicacao, direction: 'left' | 'right') => {
-    const currentIndex = INDICACAO_STATUS_MAP.indexOf(item.status);
-    const nextIndex = direction === 'right' ? currentIndex + 1 : currentIndex - 1;
-    if (nextIndex >= 0 && nextIndex < INDICACAO_STATUS_MAP.length) {
-      await cloud.updateStatus('indicacoes', item.id!, INDICACAO_STATUS_MAP[nextIndex]);
-    }
+  const moveVenda = async (v: Venda, dir: 'left' | 'right') => {
+    const idx = VENDA_STATUS_MAP.indexOf(v.status);
+    const nextIdx = dir === 'left' ? idx - 1 : idx + 1;
+    if (nextIdx >= 0 && nextIdx < VENDA_STATUS_MAP.length) await cloud.updateStatus('vendas', v.id!, VENDA_STATUS_MAP[nextIdx]);
   };
 
-  // Bulk Actions
-  const handleBulkDeleteVendas = async () => {
-    if (window.confirm(`Excluir permanentemente ${selectedVendas.length} registros?`)) {
-      for (const id of selectedVendas) await cloud.apagar('vendas', id);
-      setSelectedVendas([]);
-    }
+  const moveIndicacao = async (i: Indicacao, dir: 'left' | 'right') => {
+    const idx = INDICACAO_STATUS_MAP.indexOf(i.status);
+    const nextIdx = dir === 'left' ? idx - 1 : idx + 1;
+    if (nextIdx >= 0 && nextIdx < INDICACAO_STATUS_MAP.length) await cloud.updateStatus('indicacoes', i.id!, INDICACAO_STATUS_MAP[nextIdx]);
   };
 
-  const handleBulkDeleteIndicacoes = async () => {
-    if (window.confirm(`Excluir permanentemente ${selectedIndicacoes.length} leads?`)) {
-      for (const id of selectedIndicacoes) await cloud.apagar('indicacoes', id);
-      setSelectedIndicacoes([]);
-    }
-  };
-
-  const toggleVendaSelection = (id: string) => {
-    setSelectedVendas(prev => prev.includes(id) ? prev.filter(v => v !== id) : [...prev, id]);
-  };
-
-  const toggleIndicacaoSelection = (id: string) => {
-    setSelectedIndicacoes(prev => prev.includes(id) ? prev.filter(i => i !== id) : [...prev, id]);
-  };
-
-  // Filtros Otimizados
   const filteredVendas = useMemo(() => {
     let list = user?.isAdmin ? vendas : vendas.filter(v => v.vendedor === user?.nome);
-    if (user?.isAdmin && salesmanFilter !== 'TODOS') {
-      list = list.filter(v => v.vendedor === salesmanFilter);
-    }
+    if (user?.isAdmin && salesmanFilter !== 'TODOS') list = list.filter(v => v.vendedor === salesmanFilter);
     if (searchTerm) {
-      const lower = searchTerm.toLowerCase();
-      list = list.filter(v => 
-        (v.cliente || '').toLowerCase().includes(lower) || 
-        (v.vendedor || '').toLowerCase().includes(lower) ||
-        (v.empresa || '').toLowerCase().includes(lower)
-      );
+      const low = searchTerm.toLowerCase();
+      list = list.filter(v => (v.cliente || '').toLowerCase().includes(low) || (v.vendedor || '').toLowerCase().includes(low));
     }
     return list;
   }, [vendas, user, searchTerm, salesmanFilter]);
 
   const filteredIndicacoes = useMemo(() => {
     let list = user?.isAdmin ? indicacoes : indicacoes.filter(i => i.vendedor === user?.nome);
-    if (user?.isAdmin && salesmanFilter !== 'TODOS') {
-      list = list.filter(i => i.vendedor === salesmanFilter);
-    }
+    if (user?.isAdmin && salesmanFilter !== 'TODOS') list = list.filter(i => i.vendedor === salesmanFilter);
     if (searchTerm) {
-      const lower = searchTerm.toLowerCase();
-      list = list.filter(i => 
-        (i.cliente || '').toLowerCase().includes(lower) || 
-        (i.veiculo || '').toLowerCase().includes(lower) ||
-        (i.vendedor || '').toLowerCase().includes(lower)
-      );
+      const low = searchTerm.toLowerCase();
+      list = list.filter(i => (i.cliente || '').toLowerCase().includes(low) || (i.vendedor || '').toLowerCase().includes(low));
     }
     return list;
   }, [indicacoes, user, searchTerm, salesmanFilter]);
 
-  // --- Views ---
-
-  const PerformanceTeamView = () => {
-    const metrics = useMemo(() => {
-      const now = new Date();
-      const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1).getTime();
-      const mesVendas = vendas.filter(v => v.dataCriacao >= startOfMonth);
-
-      const getNormalizedEmpresa = (rawEmp?: string) => {
-        if (!rawEmp || rawEmp.trim() === '') return 'SUHAI SEGURADORA';
-        const empUpper = rawEmp.toUpperCase().trim();
-        if (empUpper === 'OUTRAS') return 'SUHAI SEGURADORA';
-        if (empUpper.includes('SUHAI')) return 'SUHAI SEGURADORA';
-        return empUpper;
-      };
-
-      const userList = usuarios.filter(u => u.setor === 'VENDEDOR');
-      
-      const perUser = userList.map(u => {
-        const myVendas = mesVendas.filter(v => v.vendedor === u.nome);
-        const empresas: Record<string, number> = {};
-        myVendas.forEach(v => {
-          const emp = getNormalizedEmpresa(v.empresa);
-          empresas[emp] = (empresas[emp] || 0) + 1;
-        });
-
-        return {
-          nome: u.nome,
-          totalVendas: myVendas.length,
-          empresas,
-          comissaoTotal: myVendas.reduce((acc, v) => acc + (v.comissao_cheia || 0), 0),
-          premioTotal: myVendas.reduce((acc, v) => acc + (v.valor || 0), 0)
-        };
-      });
-
-      const globalEmpresas: Record<string, number> = {};
-      perUser.forEach(mu => {
-        Object.entries(mu.empresas).forEach(([emp, count]) => {
-          globalEmpresas[emp] = (globalEmpresas[emp] || 0) + (count as number);
-        });
-      });
-
-      return { globalEmpresas, perUser };
-    }, [vendas, usuarios]);
-
-    return (
-      <div className="animate-in fade-in duration-500">
-        <h2 className="text-4xl font-black uppercase text-purple-400 mb-10 tracking-tighter">Performance Team</h2>
-        
-        <div className="bg-[#111827] p-8 rounded-[3rem] border border-gray-800 mb-10 shadow-2xl">
-          <h3 className="text-xl font-black uppercase text-white mb-6 flex items-center gap-3">
-             <i className="fas fa-building text-purple-500"></i> Produção Global por Seguradora (Mês)
-          </h3>
-          <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-5 gap-4">
-            {Object.entries(metrics.globalEmpresas).sort((a,b) => (b[1] as number) - (a[1] as number)).map(([name, count]) => (
-              <div key={name} className="bg-[#0f172a] p-4 rounded-2xl border border-gray-800 text-center border-t-4 border-t-purple-600/50">
-                <p className="text-[10px] font-black text-gray-500 uppercase mb-1">{name}</p>
-                <p className="text-2xl font-black text-white">{count}</p>
-                <p className="text-[8px] font-bold text-purple-400 uppercase">Apólices em Produção</p>
-              </div>
-            ))}
-            {Object.keys(metrics.globalEmpresas).length === 0 && (
-              <div className="col-span-full py-6 text-center text-gray-600 font-bold uppercase text-[10px]">Aguardando lançamentos no mês</div>
-            )}
-          </div>
-        </div>
-
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
-          {metrics.perUser.map(mu => (
-            <div key={mu.nome} className="bg-[#111827] p-8 rounded-[3rem] border border-gray-800 border-t-8 border-t-purple-600 shadow-2xl hover:scale-[1.02] transition-all">
-               <h4 className="text-xl font-black uppercase text-white mb-6 text-center">{mu.nome}</h4>
-               
-               <div className="bg-[#0f172a] p-5 rounded-2xl border border-gray-800 mb-6 text-center shadow-inner">
-                  <p className="text-[10px] text-gray-500 font-black uppercase mb-1">Produção Real (Mês)</p>
-                  <p className="text-4xl font-black text-purple-400">{mu.totalVendas}</p>
-               </div>
-
-               <div className="space-y-4 mb-8">
-                  <p className="text-[10px] font-black text-gray-500 uppercase border-b border-gray-800 pb-2">Quebra por Empresa</p>
-                  <div className="grid grid-cols-2 gap-2">
-                    {Object.entries(mu.empresas).map(([e, c]) => (
-                      <div key={e} className="flex justify-between items-center text-[11px] font-bold">
-                        <span className="text-gray-400 uppercase">{e}</span>
-                        <span className="text-white bg-purple-900/30 px-2 py-0.5 rounded-lg">{c}</span>
-                      </div>
-                    ))}
-                    {Object.keys(mu.empresas).length === 0 && <p className="text-[10px] text-gray-700 uppercase text-center w-full">Sem vendas registradas</p>}
-                  </div>
-               </div>
-
-               <div className="grid grid-cols-2 gap-4">
-                  <div className="bg-green-500/5 p-4 rounded-2xl border border-green-500/10 text-center">
-                     <p className="text-[8px] text-green-500 font-black uppercase mb-1">C. Produzida</p>
-                     <p className="text-[12px] font-black text-white">{FORMAT_BRL(mu.comissaoTotal)}</p>
-                  </div>
-                  <div className="bg-blue-500/5 p-4 rounded-2xl border border-blue-500/10 text-center">
-                     <p className="text-[8px] text-blue-500 font-black uppercase mb-1">Prêmio Produzido</p>
-                     <p className="text-[12px] font-black text-white">{FORMAT_BRL(mu.premioTotal)}</p>
-                  </div>
-               </div>
-            </div>
-          ))}
-        </div>
-      </div>
-    );
-  };
-
-  const Dashboard = () => {
-    const stats = useMemo(() => {
-      const now = new Date();
-      const startOfDay = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
-      const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1).getTime();
-
-      const baseVendas = user?.isAdmin ? vendas : vendas.filter(v => v.vendedor === user?.nome);
-      
-      const hojeVendas = baseVendas.filter(v => v.dataCriacao >= startOfDay);
-      const mesVendas = baseVendas.filter(v => v.dataCriacao >= startOfMonth);
-      const mesVendasPagas = mesVendas.filter(v => v.status === 'Pagamento Efetuado');
-
-      const userMeta = metas.find(m => m.vendedor === (user?.isAdmin ? 'EMPRESA_VM_SEGUROS' : user?.nome));
-      const companyMeta = metas.find(m => m.vendedor === 'EMPRESA_VM_SEGUROS');
-
-      const globalMesVendas = vendas.filter(v => v.dataCriacao >= startOfMonth);
-      const globalMesVendasPagas = globalMesVendas.filter(v => v.status === 'Pagamento Efetuado');
-
-      return {
-        vendasDia: hojeVendas.length,
-        premioDia: hojeVendas.reduce((acc, v) => acc + (v.valor || 0), 0),
-        vendasMes: mesVendas.length,
-        premioMes: mesVendasPagas.reduce((acc, v) => acc + (v.valor || 0), 0),
-        comissaoMes: mesVendasPagas.reduce((acc, v) => acc + (v.comissao_vendedor || 0), 0),
-        userMeta,
-        companyMeta,
-        globalVendasCount: globalMesVendas.length,
-        globalPremioTotal: globalMesVendasPagas.reduce((acc, v) => acc + (v.valor || 0), 0),
-        globalComissaoTotal: globalMesVendasPagas.reduce((acc, v) => acc + (v.comissao_cheia || 0), 0)
-      };
-    }, [vendas, metas, user]);
-
-    return (
-      <div className="animate-in fade-in duration-500">
-        <h2 className="text-4xl font-black uppercase text-white tracking-tighter mb-10">Cockpit Geral</h2>
-        
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-12">
-          <div className="bg-[#111827] p-8 rounded-[2.5rem] border border-gray-800 shadow-xl border-l-4 border-l-blue-500">
-            <p className="text-gray-500 text-[10px] font-black uppercase mb-1">Vendas (Hoje)</p>
-            <h3 className="text-5xl font-black text-white">{stats.vendasDia}</h3>
-            <p className="text-[9px] text-gray-600 mt-2 uppercase font-bold">Lançamentos do dia</p>
-          </div>
-          
-          <div className="bg-[#111827] p-8 rounded-[2.5rem] border border-gray-800 shadow-xl border-l-4 border-l-green-500">
-            <p className="text-gray-500 text-[10px] font-black uppercase mb-1">Prêmio Líquido (Hoje)</p>
-            <h3 className="text-3xl font-black text-green-500">{FORMAT_BRL(stats.premioDia)}</h3>
-            <p className="text-[9px] text-gray-600 mt-2 uppercase font-bold">Total produzido hoje</p>
-          </div>
-
-          <div className="bg-[#111827] p-8 rounded-[2.5rem] border border-gray-800 shadow-xl border-l-4 border-l-yellow-500">
-            <p className="text-gray-500 text-[10px] font-black uppercase mb-1">Vendas (No Mês)</p>
-            <h3 className="text-5xl font-black text-white">{stats.vendasMes}</h3>
-            <p className="text-[9px] text-gray-600 mt-2 uppercase font-bold">Total acumulado mês</p>
-          </div>
-
-          <div className="bg-[#111827] p-8 rounded-[2.5rem] border border-gray-800 shadow-xl border-l-4 border-l-white">
-            <p className="text-gray-500 text-[10px] font-black uppercase mb-1">Prêmio Líquido (No Mês)</p>
-            <h3 className="text-3xl font-black text-white">{FORMAT_BRL(stats.premioMes)}</h3>
-            <p className="text-[9px] text-gray-400 mt-2 uppercase font-bold">Apenas pagamentos confirmados</p>
-          </div>
-        </div>
-
-        {user?.isAdmin && stats.companyMeta && (
-          <div className="mb-12 animate-in slide-in-from-top duration-700">
-             <div className="bg-[#111827] p-10 rounded-[3.5rem] border border-purple-500/20 shadow-[0_0_50px_rgba(168,85,247,0.1)] relative overflow-hidden">
-                <div className="absolute top-0 right-0 p-8 opacity-10">
-                   <i className="fas fa-building text-9xl text-purple-500"></i>
-                </div>
-                
-                <h3 className="text-2xl font-black uppercase text-white mb-10 flex items-center gap-3">
-                  <i className="fas fa-chart-line text-purple-500"></i> Performance Consolidada (VM SEGUROS)
-                </h3>
-
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-10">
-                   <div className="space-y-4">
-                      <div className="flex justify-between items-end">
-                         <div>
-                            <p className="text-gray-500 text-[10px] font-black uppercase">Vendas Totais Empresa</p>
-                            <h4 className="text-3xl font-black text-white">{stats.globalVendasCount} / <span className="text-gray-600">{stats.companyMeta.meta_qtd}</span></h4>
-                         </div>
-                         <p className="text-[10px] font-black text-purple-400">{((stats.globalVendasCount / stats.companyMeta.meta_qtd) * 100).toFixed(0)}%</p>
-                      </div>
-                      <div className="h-3 bg-[#0f172a] rounded-full border border-gray-800 overflow-hidden">
-                         <div className="h-full bg-purple-500 transition-all duration-1000" style={{ width: `${Math.min((stats.globalVendasCount / stats.companyMeta.meta_qtd) * 100, 100)}%` }}></div>
-                      </div>
-                   </div>
-
-                   <div className="space-y-4">
-                      <div className="flex justify-between items-end">
-                         <div>
-                            <p className="text-gray-500 text-[10px] font-black uppercase">Prêmio Bruto Acumulado</p>
-                            <h4 className="text-2xl font-black text-white">{FORMAT_BRL(stats.globalPremioTotal)}</h4>
-                         </div>
-                         <p className="text-[10px] font-black text-green-500">{((stats.globalPremioTotal / stats.companyMeta.meta_premio) * 100).toFixed(0)}%</p>
-                      </div>
-                      <div className="h-3 bg-[#0f172a] rounded-full border border-gray-800 overflow-hidden">
-                         <div className="h-full bg-green-500 transition-all duration-1000" style={{ width: `${Math.min((stats.globalPremioTotal / stats.companyMeta.meta_premio) * 100, 100)}%` }}></div>
-                      </div>
-                      <p className="text-[9px] text-gray-600 font-bold uppercase">Meta Global: {FORMAT_BRL(stats.companyMeta.meta_premio)}</p>
-                   </div>
-
-                   <div className="space-y-4">
-                      <div className="flex justify-between items-end">
-                         <div>
-                            <p className="text-gray-500 text-[10px] font-black uppercase">Comissão Bruta Empresa</p>
-                            <h4 className="text-2xl font-black text-white">{FORMAT_BRL(stats.globalComissaoTotal)}</h4>
-                         </div>
-                         <p className="text-[10px] font-black text-yellow-500">{((stats.globalComissaoTotal / stats.companyMeta.meta_salario) * 100).toFixed(0)}%</p>
-                      </div>
-                      <div className="h-3 bg-[#0f172a] rounded-full border border-gray-800 overflow-hidden">
-                         <div className="h-full bg-yellow-500 transition-all duration-1000" style={{ width: `${Math.min((stats.globalComissaoTotal / stats.companyMeta.meta_salario) * 100, 100)}%` }}></div>
-                      </div>
-                      <p className="text-[9px] text-gray-600 font-bold uppercase">Meta Faturamento: {FORMAT_BRL(stats.companyMeta.meta_salario)}</p>
-                   </div>
-                </div>
-             </div>
-          </div>
-        )}
-
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 mb-8">
-           <div className="bg-[#111827] p-10 rounded-[3rem] border border-gray-800 shadow-2xl">
-              <h3 className="text-xl font-black uppercase text-white mb-8 flex items-center gap-3">
-                <i className="fas fa-chart-line text-blue-500"></i> Funil de Produção
-              </h3>
-              <div className="space-y-6">
-                {VENDA_STATUS_MAP.map(status => {
-                  const myVendas = user?.isAdmin ? vendas : vendas.filter(v => v.vendedor === user?.nome);
-                  const count = myVendas.filter(v => v.status === status).length;
-                  const total = myVendas.length;
-                  const percent = total > 0 ? (count / total) * 100 : 0;
-                  return (
-                    <div key={status} className="space-y-2">
-                      <div className="flex justify-between text-[10px] font-black uppercase text-gray-500">
-                        <span>{status}</span>
-                        <span className="text-white">{count} ({percent.toFixed(0)}%)</span>
-                      </div>
-                      <div className="h-2 bg-[#0f172a] rounded-full overflow-hidden border border-gray-800">
-                        <div className="h-full bg-blue-600 shadow-[0_0_10px_rgba(37,99,235,0.5)] transition-all" style={{ width: `${percent}%` }}></div>
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-           </div>
-
-           <div className="bg-[#111827] p-10 rounded-[3rem] border border-gray-800 shadow-2xl">
-              <h3 className="text-xl font-black uppercase text-white mb-8 flex items-center gap-3">
-                <i className="fas fa-bolt text-yellow-500"></i> Status dos Leads
-              </h3>
-              <div className="space-y-6">
-                {INDICACAO_STATUS_MAP.map(status => {
-                  const myLeads = user?.isAdmin ? indicacoes : indicacoes.filter(i => i.vendedor === user?.nome);
-                  const count = myLeads.filter(i => i.status === status).length;
-                  const total = myLeads.length;
-                  const percent = total > 0 ? (count / total) * 100 : 0;
-                  return (
-                    <div key={status} className="space-y-2">
-                      <div className="flex justify-between text-[10px] font-black uppercase text-gray-500">
-                        <span>{status}</span>
-                        <span className="text-white">{count} ({percent.toFixed(0)}%)</span>
-                      </div>
-                      <div className="h-2 bg-[#0f172a] rounded-full overflow-hidden border border-gray-800">
-                        <div className="h-full bg-yellow-500 shadow-[0_0_10px_rgba(234,179,8,0.5)] transition-all" style={{ width: `${percent}%` }}></div>
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-           </div>
-        </div>
-
-        {!user?.isAdmin && stats.userMeta && (
-          <div className="animate-in slide-in-from-bottom duration-700">
-             <div className="bg-[#111827] p-10 rounded-[3.5rem] border border-blue-500/20 shadow-[0_0_50px_rgba(59,130,246,0.1)] relative overflow-hidden">
-                <div className="absolute top-0 right-0 p-8 opacity-10">
-                   <i className="fas fa-bullseye text-9xl text-blue-500"></i>
-                </div>
-                
-                <h3 className="text-2xl font-black uppercase text-white mb-10 flex items-center gap-3">
-                  <i className="fas fa-trophy text-yellow-500"></i> Meus Objetivos do Mês
-                </h3>
-
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-10">
-                   <div className="space-y-4">
-                      <div className="flex justify-between items-end">
-                         <div>
-                            <p className="text-gray-500 text-[10px] font-black uppercase">Quantidade de Vendas</p>
-                            <h4 className="text-3xl font-black text-white">{stats.vendasMes} / <span className="text-gray-600">{stats.userMeta.meta_qtd}</span></h4>
-                         </div>
-                         <p className="text-[10px] font-black text-blue-400">{((stats.vendasMes / stats.userMeta.meta_qtd) * 100).toFixed(0)}%</p>
-                      </div>
-                      <div className="h-3 bg-[#0f172a] rounded-full border border-gray-800 overflow-hidden">
-                         <div className="h-full bg-blue-500 transition-all duration-1000" style={{ width: `${Math.min((stats.vendasMes / stats.userMeta.meta_qtd) * 100, 100)}%` }}></div>
-                      </div>
-                   </div>
-
-                   <div className="space-y-4">
-                      <div className="flex justify-between items-end">
-                         <div>
-                            <p className="text-gray-500 text-[10px] font-black uppercase">Prêmio Produzido (Pago)</p>
-                            <h4 className="text-2xl font-black text-white">{FORMAT_BRL(stats.premioMes)}</h4>
-                         </div>
-                         <p className="text-[10px] font-black text-green-500">{((stats.premioMes / stats.userMeta.meta_premio) * 100).toFixed(0)}%</p>
-                      </div>
-                      <div className="h-3 bg-[#0f172a] rounded-full border border-gray-800 overflow-hidden">
-                         <div className="h-full bg-green-500 transition-all duration-1000" style={{ width: `${Math.min((stats.premioMes / stats.userMeta.meta_premio) * 100, 100)}%` }}></div>
-                      </div>
-                      <p className="text-[9px] text-gray-600 font-bold uppercase">Meta: {FORMAT_BRL(stats.userMeta.meta_premio)}</p>
-                   </div>
-
-                   <div className="space-y-4">
-                      <div className="flex justify-between items-end">
-                         <div>
-                            <p className="text-gray-500 text-[10px] font-black uppercase">Comissão Acumulada</p>
-                            <h4 className="text-2xl font-black text-white">{FORMAT_BRL(stats.comissaoMes)}</h4>
-                         </div>
-                         <p className="text-[10px] font-black text-purple-500">{((stats.comissaoMes / stats.userMeta.meta_salario) * 100).toFixed(0)}%</p>
-                      </div>
-                      <div className="h-3 bg-[#0f172a] rounded-full border border-gray-800 overflow-hidden">
-                         <div className="h-full bg-purple-500 transition-all duration-1000" style={{ width: `${Math.min((stats.comissaoMes / stats.userMeta.meta_salario) * 100, 100)}%` }}></div>
-                      </div>
-                      <p className="text-[9px] text-gray-600 font-bold uppercase">Meta Salarial: {FORMAT_BRL(stats.userMeta.meta_salario)}</p>
-                   </div>
-                </div>
-             </div>
-          </div>
-        )}
-      </div>
-    );
-  };
-
-  const KanbanIndicacoes = () => (
-    <div className="animate-in fade-in duration-300 h-full flex flex-col">
-      <div className="flex justify-between items-center mb-8">
-        <div>
-          <h2 className="text-3xl font-black uppercase text-yellow-500 tracking-tighter">Leads</h2>
-          <p className="text-[10px] font-bold text-gray-500 uppercase">Selecione para excluir em massa</p>
-        </div>
-        <div className="flex gap-4">
-          {selectedIndicacoes.length > 0 && (
-            <button onClick={handleBulkDeleteIndicacoes} className="bg-red-600/20 text-red-500 border border-red-600/30 px-6 py-3 rounded-2xl font-black text-[11px] uppercase hover:bg-red-600 hover:text-white transition-all">
-              Excluir Selecionados ({selectedIndicacoes.length})
-            </button>
-          )}
-          <button onClick={() => { setModalType('indicacao'); setEditingItem(null); }} className="bg-yellow-500 px-8 py-3 rounded-2xl font-black text-[11px] uppercase text-black">Novo Lead</button>
-        </div>
-      </div>
-      
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
-        <div className="relative">
-          <i className="fas fa-search absolute left-4 top-1/2 -translate-y-1/2 text-gray-500"></i>
-          <input type="text" placeholder="BUSCAR LEADS..." className="w-full bg-[#111827] border border-gray-800 rounded-2xl py-4 pl-12 pr-4 text-xs font-bold text-white outline-none focus:border-yellow-500 transition-all uppercase" value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} />
-        </div>
-        {user?.isAdmin && (
-           <div className="relative">
-             <i className="fas fa-user-tie absolute left-4 top-1/2 -translate-y-1/2 text-gray-500"></i>
-             <select value={salesmanFilter} onChange={(e) => setSalesmanFilter(e.target.value)} className="w-full bg-[#111827] border border-gray-800 rounded-2xl py-4 pl-12 pr-4 text-xs font-bold text-white outline-none focus:border-yellow-500 transition-all uppercase appearance-none">
-               <option value="TODOS">TODOS VENDEDORES</option>
-               {usuarios.map(u => <option key={u.id} value={u.nome}>{u.nome}</option>)}
-             </select>
-             <i className="fas fa-chevron-down absolute right-4 top-1/2 -translate-y-1/2 text-gray-600 pointer-events-none"></i>
-           </div>
-        )}
-      </div>
-
-      <div className="flex-1 flex gap-6 overflow-x-auto pb-6 scrollbar-thin">
-        {INDICACAO_STATUS_MAP.map(status => (
-          <div key={status} className="kanban-column bg-[#0f172a] rounded-[2.5rem] p-5 border border-gray-800 flex flex-col">
-            <h3 className="text-[10px] font-black uppercase text-gray-500 mb-6 text-center tracking-[0.2em]">{status}</h3>
-            <div className="flex-1 space-y-4 overflow-y-auto pr-2 scrollbar-thin">
-              {filteredIndicacoes.filter(i => i.status === status).map(i => (
-                <div key={i.id} className="group bg-[#111827] border border-gray-800 p-6 rounded-[2.5rem] border-l-4 border-l-yellow-500 hover:scale-[1.02] transition-all shadow-xl relative">
-                  <div className="absolute top-4 left-4">
-                    <input type="checkbox" checked={selectedIndicacoes.includes(i.id!)} onChange={() => toggleIndicacaoSelection(i.id!)} className="w-4 h-4 rounded accent-yellow-500 cursor-pointer" />
-                  </div>
-                  <div className="absolute top-4 right-4">
-                     <button onClick={() => { setModalType('indicacao'); setEditingItem(i); }} className="text-gray-600 hover:text-yellow-500 transition-colors p-2">
-                        <i className="fas fa-pen text-[10px]"></i>
-                     </button>
-                  </div>
-                  <div className="flex justify-between items-start mb-2 ml-6 mr-8">
-                    <h4 onClick={() => { setModalType('indicacao'); setEditingItem(i); }} className="text-[12px] font-black uppercase text-white cursor-pointer hover:text-yellow-500 leading-tight">{i.cliente}</h4>
-                    <button onClick={async () => { if(confirm("Excluir lead?")) await cloud.apagar('indicacoes', i.id!); }} className="text-red-500/30 hover:text-red-500 ml-2"><i className="fas fa-trash text-[10px]"></i></button>
-                  </div>
-                  <p className="text-[10px] text-yellow-400 font-bold mb-3 ml-6 flex items-center gap-1"><i className="fab fa-whatsapp"></i>{i.tel}</p>
-                  <p className="text-[10px] text-gray-500 font-bold uppercase mb-4 ml-6">{i.veiculo}</p>
-                  <div className="flex justify-between items-center pt-3 border-t border-gray-800">
-                    <button disabled={INDICACAO_STATUS_MAP.indexOf(i.status) === 0} onClick={() => moveIndicacao(i, 'left')} className="w-8 h-8 rounded-full bg-gray-800 flex items-center justify-center text-gray-400 hover:bg-yellow-500 hover:text-black disabled:opacity-0 transition-all"><i className="fas fa-chevron-left text-[10px]"></i></button>
-                    <span className="text-[8px] font-black uppercase text-gray-600">{i.vendedor}</span>
-                    <button disabled={INDICACAO_STATUS_MAP.indexOf(i.status) === INDICACAO_STATUS_MAP.length - 1} onClick={() => moveIndicacao(i, 'right')} className="w-8 h-8 rounded-full bg-gray-800 flex items-center justify-center text-gray-400 hover:bg-yellow-500 hover:text-black disabled:opacity-0 transition-all"><i className="fas fa-chevron-right text-[10px]"></i></button>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
-        ))}
-      </div>
-    </div>
-  );
-
-  const KanbanVendas = () => (
-    <div className="animate-in fade-in duration-300 h-full flex flex-col">
-      <div className="flex justify-between items-center mb-8">
-        <div>
-          <h2 className="text-3xl font-black uppercase text-blue-500 tracking-tighter">Produção</h2>
-          <p className="text-[10px] font-bold text-gray-500 uppercase">Gestão completa de apólices</p>
-        </div>
-        <div className="flex gap-4">
-          {selectedVendas.length > 0 && (
-            <button onClick={handleBulkDeleteVendas} className="bg-red-600/20 text-red-500 border border-red-600/30 px-6 py-3 rounded-2xl font-black text-[11px] uppercase hover:bg-red-600 hover:text-white transition-all">
-              Excluir Selecionados ({selectedVendas.length})
-            </button>
-          )}
-          <button onClick={() => { setModalType('venda'); setEditingItem(null); }} className="bg-blue-600 px-8 py-3 rounded-2xl font-black text-[11px] uppercase text-white shadow-lg shadow-blue-500/20">Lançar Venda</button>
-        </div>
-      </div>
-
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
-        <div className="relative">
-          <i className="fas fa-search absolute left-4 top-1/2 -translate-y-1/2 text-gray-500"></i>
-          <input type="text" placeholder="PESQUISAR PRODUÇÃO..." className="w-full bg-[#111827] border border-gray-800 rounded-2xl py-4 pl-12 pr-4 text-xs font-bold text-white outline-none focus:border-blue-500 transition-all uppercase" value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} />
-        </div>
-        {user?.isAdmin && (
-           <div className="relative">
-             <i className="fas fa-user-tie absolute left-4 top-1/2 -translate-y-1/2 text-gray-500"></i>
-             <select value={salesmanFilter} onChange={(e) => setSalesmanFilter(e.target.value)} className="w-full bg-[#111827] border border-gray-800 rounded-2xl py-4 pl-12 pr-4 text-xs font-bold text-white outline-none focus:border-blue-500 transition-all uppercase appearance-none">
-               <option value="TODOS">TODOS VENDEDORES</option>
-               {usuarios.map(u => <option key={u.id} value={u.nome}>{u.nome}</option>)}
-             </select>
-             <i className="fas fa-chevron-down absolute right-4 top-1/2 -translate-y-1/2 text-gray-600 pointer-events-none"></i>
-           </div>
-        )}
-      </div>
-
-      <div className="flex-1 flex gap-4 overflow-x-auto pb-6 scrollbar-thin">
-        {VENDA_STATUS_MAP.map(status => (
-          <div key={status} className="kanban-column bg-[#0f172a] rounded-[2.5rem] p-5 border border-gray-800 flex flex-col">
-            <h3 className="text-[10px] font-black uppercase text-gray-500 mb-6 text-center tracking-[0.2em]">{status}</h3>
-            <div className="flex-1 space-y-4 overflow-y-auto pr-2 scrollbar-thin">
-              {filteredVendas.filter(v => v.status === status).map(v => (
-                <div key={v.id} className="group bg-[#111827] border border-gray-800 p-4 rounded-[2rem] border-l-4 border-l-blue-600 hover:scale-[1.02] transition-all shadow-xl relative">
-                  <div className="absolute top-3 left-3">
-                    <input type="checkbox" checked={selectedVendas.includes(v.id!)} onChange={() => toggleVendaSelection(v.id!)} className="w-4 h-4 rounded accent-blue-500 cursor-pointer" />
-                  </div>
-                  <div className="absolute top-3 right-3">
-                     <button onClick={() => { setModalType('venda'); setEditingItem(v); }} className="text-gray-600 hover:text-blue-500 transition-colors p-2"><i className="fas fa-pen text-[10px]"></i></button>
-                  </div>
-                  <div className="flex justify-between items-start mb-1 ml-6 mr-8">
-                    <h4 onClick={() => { setModalType('venda'); setEditingItem(v); }} className="text-[12px] font-black uppercase text-white cursor-pointer hover:text-blue-500 leading-tight">{v.cliente}</h4>
-                    {v.suhai && <i className="fas fa-star text-green-500 text-[10px] s-suhai-pulse"></i>}
-                  </div>
-                  <p className="text-[9px] text-blue-400 font-bold mb-2 ml-6 flex items-center gap-1"><i className="fab fa-whatsapp"></i>{v.tel}</p>
-                  <p className="text-[8px] text-gray-500 font-black uppercase mb-3 ml-6">{v.empresa || 'Seguradora'}</p>
-                  <div className="bg-[#0f172a] p-3 rounded-2xl mb-4 border border-gray-800 text-center shadow-inner">
-                    <p className="text-[7px] text-gray-500 font-black uppercase mb-1">Prêmio Líquido</p>
-                    <p className="text-[14px] font-black text-white">{FORMAT_BRL(v.valor)}</p>
-                  </div>
-                  <div className="grid grid-cols-2 gap-2 mb-4">
-                    <div className="bg-gray-800/40 p-2 rounded-xl border border-gray-800 text-center">
-                      <p className="text-[6px] font-black text-gray-500 uppercase mb-1">C. Cheia</p>
-                      <p className="text-[9px] font-bold text-gray-300">{FORMAT_BRL(v.comissao_cheia)}</p>
-                    </div>
-                    <div className="bg-green-500/5 p-2 rounded-xl border border-green-500/20 text-center">
-                      <p className="text-[6px] font-black text-green-500 uppercase mb-1">Sua Parte</p>
-                      <p className="text-[9px] font-black text-green-400">{FORMAT_BRL(v.comissao_vendedor)}</p>
-                    </div>
-                  </div>
-                  <div className="flex justify-between items-center pt-2 border-t border-gray-800">
-                    <button disabled={VENDA_STATUS_MAP.indexOf(v.status) === 0} onClick={() => moveVenda(v, 'left')} className="w-8 h-8 rounded-full bg-gray-800 flex items-center justify-center text-gray-400 hover:bg-blue-600 hover:text-white disabled:opacity-0 transition-all"><i className="fas fa-chevron-left text-[10px]"></i></button>
-                    <div className="text-center"><p className="text-[8px] text-blue-400 font-black uppercase">{v.vendedor}</p></div>
-                    <button disabled={VENDA_STATUS_MAP.indexOf(v.status) === VENDA_STATUS_MAP.length - 1} onClick={() => moveVenda(v, 'right')} className="w-8 h-8 rounded-full bg-gray-800 flex items-center justify-center text-gray-400 hover:bg-blue-600 hover:text-white disabled:opacity-0 transition-all"><i className="fas fa-chevron-right text-[10px]"></i></button>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
-        ))}
-      </div>
-    </div>
-  );
-
-  const LeadSuhaiView = () => {
-    const suhaiRecords = filteredVendas.filter(v => v.suhai && v.status === 'Pagamento Efetuado');
-    const totalComissao = suhaiRecords.reduce((acc, v) => acc + (user?.isAdmin ? (v.comissao_cheia || 0) : (v.comissao_vendedor || 0)), 0);
-    const totalPremio = suhaiRecords.reduce((acc, v) => acc + (v.valor || 0), 0);
-    return (
-      <div className="animate-in fade-in duration-500">
-        <h2 className="text-4xl font-black uppercase text-green-500 mb-10 tracking-tighter">Suhai Gold - Pagos</h2>
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-8 mb-10">
-           <div className="bg-[#111827] p-8 rounded-[2rem] border border-green-500/30 shadow-2xl">
-              <p className="text-gray-500 text-[10px] font-black uppercase mb-1">Comissão Suhai</p>
-              <h2 className="text-5xl font-black text-green-500">{FORMAT_BRL(totalComissao)}</h2>
-           </div>
-           <div className="bg-[#111827] p-8 rounded-[2rem] border border-blue-500/30 shadow-2xl">
-              <p className="text-gray-500 text-[10px] font-black uppercase mb-1">Prêmio Total</p>
-              <h2 className="text-5xl font-black text-blue-500">{FORMAT_BRL(totalPremio)}</h2>
-           </div>
-        </div>
-        <div className="bg-[#111827] rounded-[2.5rem] border border-gray-800 overflow-hidden shadow-2xl">
-           <table className="w-full text-left">
-              <thead className="bg-[#0f172a] text-gray-400 text-[10px] uppercase font-black">
-                 <tr><th className="p-6">Vendedor</th><th className="p-6">Cliente</th><th className="p-6">Prêmio</th><th className="p-6">Comissão</th><th className="p-6 text-center">Status</th></tr>
-              </thead>
-              <tbody className="text-xs font-bold uppercase">
-                 {suhaiRecords.map(v => (
-                    <tr key={v.id} className="border-b border-gray-800 hover:bg-gray-800/20">
-                       <td className="p-6 text-blue-400">{v.vendedor}</td><td className="p-6 text-white">{v.cliente}</td><td className="p-6 text-gray-400">{FORMAT_BRL(v.valor)}</td><td className="p-6 text-green-500 font-black">{FORMAT_BRL(user?.isAdmin ? v.comissao_cheia : v.comissao_vendedor)}</td><td className="p-6 text-center"><span className="text-[9px] bg-green-500/10 text-green-500 px-3 py-1 rounded-full">PAGO</span></td>
-                    </tr>
-                 ))}
-              </tbody>
-           </table>
-        </div>
-      </div>
-    );
-  };
-
-  const Financeiro = () => {
-    const concluido = filteredVendas.filter(v => v.status === 'Pagamento Efetuado');
-    const totalComissao = concluido.reduce((a, b) => a + Number(user?.isAdmin ? (b.comissao_cheia || 0) : (b.comissao_vendedor || 0)), 0);
-    return (
-      <div className="animate-in fade-in duration-500">
-        <h2 className="text-4xl font-black uppercase text-green-500 mb-10 tracking-tighter">Financeiro</h2>
-        <div className="bg-[#111827] p-12 rounded-[3rem] border border-green-900/30 text-center mb-10 shadow-2xl">
-          <p className="text-gray-500 text-[11px] font-black uppercase mb-2">Total Sua Parte (Vendas Pagas)</p>
-          <h2 className="text-7xl font-black text-green-500">{FORMAT_BRL(totalComissao)}</h2>
-        </div>
-        <div className="bg-[#111827] rounded-[2rem] border border-gray-800 overflow-hidden shadow-xl">
-          <table className="w-full text-left">
-            <thead className="bg-[#1e293b] text-gray-400 text-[10px] uppercase font-black">
-              <tr><th className="p-6">Data</th><th className="p-6">Cliente</th><th className="p-6">Prêmio</th><th className="p-6">Comissão</th></tr>
-            </thead>
-            <tbody className="text-xs font-bold uppercase">
-              {concluido.map(v => (
-                <tr key={v.id} className="border-b border-gray-800 hover:bg-gray-800/20">
-                  <td className="p-6 text-gray-500">{new Date(v.dataCriacao || 0).toLocaleDateString()}</td><td className="p-6 text-white">{v.cliente}</td><td className="p-6 text-gray-400">{FORMAT_BRL(v.valor)}</td><td className="p-6 font-black text-green-500">{FORMAT_BRL(user?.isAdmin ? v.comissao_cheia : v.comissao_vendedor)}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      </div>
-    );
-  };
-
-  const FormLead = () => (
-    <div className="max-w-2xl mx-auto animate-in zoom-in-95 duration-500">
-      <div className="bg-[#111827] p-12 rounded-[3rem] border border-gray-800 shadow-2xl">
-        <h2 className="text-2xl font-black uppercase text-yellow-500 mb-10 text-center">Distribuir Lead</h2>
-        <form onSubmit={async (e) => {
-          e.preventDefault();
-          const f = (e.target as any);
-          await cloud.salvarIndicacao({ cliente: f.cliente.value, tel: f.tel.value, veiculo: f.veiculo.value, vendedor: f.vendedor.value, suhai: f.suhai.checked, status: 'NOVA INDICAÇÃO', info: f.info.value, dataCriacao: Date.now() } as any);
-          alert('Lead enviado com sucesso!');
-          f.reset();
-        }} className="space-y-6">
-          <div className="space-y-1">
-             <label className="text-[10px] font-black text-gray-500 uppercase ml-2">Nome do Cliente</label>
-             <input name="cliente" placeholder="NOME COMPLETO" className="w-full p-5 bg-[#0f172a] border border-gray-800 rounded-2xl text-white font-bold outline-none uppercase focus:border-yellow-500" required />
-          </div>
-          <div className="grid grid-cols-2 gap-4">
-             <div className="space-y-1">
-                <label className="text-[10px] font-black text-gray-500 uppercase ml-2">WhatsApp / Tel</label>
-                <input name="tel" placeholder="(00) 00000-0000" className="w-full p-5 bg-[#0f172a] border border-gray-800 rounded-2xl text-white font-bold outline-none focus:border-yellow-500" required />
-             </div>
-             <div className="space-y-1">
-                <label className="text-[10px] font-black text-gray-500 uppercase ml-2">Veículo</label>
-                <input name="veiculo" placeholder="MARCA / MODELO" className="w-full p-5 bg-[#0f172a] border border-gray-800 rounded-2xl text-white font-bold outline-none uppercase focus:border-yellow-500" required />
-             </div>
-          </div>
-          <div className="space-y-1">
-             <label className="text-[10px] font-black text-gray-500 uppercase ml-2">Atribuir ao Vendedor</label>
-             <select name="vendedor" className="w-full p-5 bg-[#0f172a] border border-gray-800 rounded-2xl text-white font-bold outline-none uppercase focus:border-yellow-500" required>
-                {usuarios.map(u => <option key={u.id} value={u.nome}>{u.nome}</option>)}
-             </select>
-          </div>
-          <div className="space-y-1">
-             <label className="text-[10px] font-black text-gray-500 uppercase ml-2">Notas Adicionais</label>
-             <textarea name="info" placeholder="DETALHES DO LEAD..." className="w-full p-5 bg-[#0f172a] border border-gray-800 rounded-2xl text-white font-bold outline-none h-32 uppercase focus:border-yellow-500"></textarea>
-          </div>
-          <div className="flex items-center gap-4 bg-[#0f172a] p-4 rounded-2xl border border-gray-800">
-            <input type="checkbox" name="suhai" className="w-6 h-6 accent-green-500" />
-            <label className="text-xs font-black uppercase text-green-500">Marcar como Suhai Gold</label>
-          </div>
-          <button type="submit" className="w-full bg-yellow-500 p-6 rounded-[2rem] font-black uppercase text-black hover:scale-105 transition-all shadow-xl">Confirmar Envio</button>
-        </form>
-      </div>
-    </div>
-  );
-
-  const VendedoresView = () => (
-    <div className="animate-in fade-in duration-500">
-      <div className="flex justify-between items-center mb-10">
-        <h2 className="text-4xl font-black uppercase text-red-500">Equipe</h2>
-        <button onClick={() => { setModalType('usuario'); setEditingItem(null); }} className="bg-red-600 px-8 py-3 rounded-2xl font-black text-[11px] uppercase text-white">Novo Usuário</button>
-      </div>
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
-        {usuarios.map(u => (
-          <div key={u.id} onClick={() => { setModalType('usuario'); setEditingItem(u); }} className="bg-[#111827] p-8 rounded-[2.5rem] border border-gray-800 border-l-8 border-l-red-600 hover:scale-[1.03] transition-all cursor-pointer shadow-xl">
-            <h4 className="text-[14px] font-black uppercase text-white mb-2">{u.nome}</h4><p className="text-[10px] text-gray-500 uppercase font-black">Setor: {u.setor}</p>
-            <div className="mt-4 inline-block bg-red-600/10 text-red-500 px-3 py-1 rounded-lg text-[11px] font-black">{u.comissao}% Comissão</div>
-          </div>
-        ))}
-      </div>
-    </div>
-  );
-
-  const MetasView = () => (
-    <div className="animate-in fade-in duration-500 space-y-12">
-      <div>
-        <h2 className="text-4xl font-black uppercase text-blue-400 mb-10">Metas dos Vendedores</h2>
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
-          {usuarios.filter(u => u.setor === 'VENDEDOR').map(u => {
-             const existingMeta = metas.find(m => m.vendedor === u.nome);
-             const displayMeta = existingMeta || { meta_salario: 0, meta_premio: 0, meta_qtd: 0 };
-             return (
-               <div key={u.id} onClick={() => { setModalType('meta'); setEditingItem(existingMeta ? existingMeta : { vendedor: u.nome }); }} className="bg-[#111827] p-8 rounded-[2.5rem] border border-gray-800 hover:border-blue-500 transition-all cursor-pointer shadow-xl">
-                 <h4 className="text-[14px] font-black uppercase text-blue-400 mb-6">{u.nome}</h4>
-                 <div className="space-y-4">
-                   <div className="flex justify-between text-[10px] font-black uppercase text-gray-500"><span>Meta Salarial</span><span className="text-white">{FORMAT_BRL(displayMeta.meta_salario)}</span></div>
-                   <div className="flex justify-between text-[10px] font-black uppercase text-gray-500"><span>Meta Prêmio</span><span className="text-white">{FORMAT_BRL(displayMeta.meta_premio)}</span></div>
-                   <div className="flex justify-between text-[10px] font-black uppercase text-gray-500"><span>Quantidade</span><span className="text-white">{displayMeta.meta_qtd}</span></div>
-                 </div>
-               </div>
-             );
-          })}
-        </div>
-      </div>
-
-      {user?.isAdmin && (
-        <div className="border-t border-gray-800 pt-12">
-           <h2 className="text-4xl font-black uppercase text-purple-400 mb-10">Meta da Empresa (VM SEGUROS)</h2>
-           <div className="max-w-xl">
-             <div 
-               onClick={() => { 
-                 const existingMeta = metas.find(m => m.vendedor === 'EMPRESA_VM_SEGUROS');
-                 setModalType('meta'); 
-                 setEditingItem(existingMeta ? existingMeta : { vendedor: 'EMPRESA_VM_SEGUROS' }); 
-               }} 
-               className="bg-[#111827] p-10 rounded-[3rem] border-2 border-dashed border-purple-500/30 hover:border-purple-500 transition-all cursor-pointer shadow-2xl relative group"
-             >
-                <div className="absolute top-6 right-6 text-purple-500 group-hover:scale-125 transition-transform">
-                   <i className="fas fa-edit"></i>
-                </div>
-                {(() => {
-                   const companyMeta = metas.find(m => m.vendedor === 'EMPRESA_VM_SEGUROS');
-                   return (
-                     <div className="space-y-6">
-                        <div className="text-center mb-4">
-                          <p className="text-[10px] font-black uppercase text-gray-500 tracking-widest">Objetivos Globais Mensais</p>
-                          <h4 className="text-2xl font-black text-white mt-1">ESTRATÉGICO VM</h4>
-                        </div>
-                        <div className="grid grid-cols-1 gap-4">
-                          <div className="bg-[#0f172a] p-4 rounded-2xl flex justify-between items-center">
-                             <span className="text-[10px] font-black uppercase text-gray-500">Meta Prêmio</span>
-                             <span className="text-xl font-black text-white">{FORMAT_BRL(companyMeta?.meta_premio || 0)}</span>
-                          </div>
-                          <div className="bg-[#0f172a] p-4 rounded-2xl flex justify-between items-center">
-                             <span className="text-[10px] font-black uppercase text-gray-500">Meta Vendas</span>
-                             <span className="text-xl font-black text-white">{companyMeta?.meta_qtd || 0} UNI</span>
-                          </div>
-                          <div className="bg-[#0f172a] p-4 rounded-2xl flex justify-between items-center">
-                             <span className="text-[10px] font-black uppercase text-gray-500">Meta Comissão</span>
-                             <span className="text-xl font-black text-white">{FORMAT_BRL(companyMeta?.meta_salario || 0)}</span>
-                          </div>
-                        </div>
-                     </div>
-                   );
-                })()}
-             </div>
-           </div>
-        </div>
-      )}
-    </div>
-  );
-
-  // View for system configuration and entity management
-  const ConfiguracoesView = () => (
-    <div className="animate-in fade-in duration-500">
-      <div className="flex justify-between items-center mb-10">
-        <h2 className="text-4xl font-black uppercase text-gray-400">Configurações</h2>
-        <button onClick={() => { setModalType('empresa'); setEditingItem(null); }} className="bg-gray-700 px-8 py-3 rounded-2xl font-black text-[11px] uppercase text-white hover:bg-gray-600 transition-all">Nova Seguradora</button>
-      </div>
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
-        {empresas.map(e => (
-          <div key={e.id} onClick={() => { setModalType('empresa'); setEditingItem(e); }} className="bg-[#111827] p-8 rounded-[2.5rem] border border-gray-800 border-l-8 border-l-gray-600 hover:scale-[1.03] transition-all cursor-pointer shadow-xl group">
-             <div className="flex justify-between items-center">
-                <h4 className="text-[14px] font-black uppercase text-white">{e.nome}</h4>
-                <button onClick={async (event) => { event.stopPropagation(); if(confirm("Excluir seguradora?")) await cloud.apagar('empresas', e.id!); }} className="text-red-500/0 group-hover:text-red-500 transition-all"><i className="fas fa-trash"></i></button>
-             </div>
-          </div>
-        ))}
-        {empresas.length === 0 && (
-          <div className="col-span-full py-12 text-center text-gray-700 font-black uppercase text-xs border-2 border-dashed border-gray-800 rounded-[3rem]">
-            Nenhuma seguradora cadastrada. Use o botão acima para começar.
-          </div>
-        )}
-      </div>
-    </div>
-  );
-
-  const ModalForm = () => {
-    const [vf, setVf] = useState<any>(editingItem || {});
-    useEffect(() => {
-      if ((modalType === 'venda' || modalType === 'indicacao') && !editingItem && user) {
-        setVf({ vendedor: user.nome, status: modalType === 'venda' ? 'Fazer Vistoria' : 'NOVA INDICAÇÃO', suhai: false, valor: 0, comissao_cheia: 0, comissao_vendedor: 0, empresa: '', tel: '', cliente: '', veiculo: '', info: '' });
-      } else if (editingItem) { setVf(editingItem); }
-    }, [modalType, editingItem, user]);
-    if (!modalType) return null;
-    const save = async (e: React.FormEvent) => {
-      e.preventDefault();
-      try {
-        if (modalType === 'venda') await cloud.salvarVenda({ ...vf });
-        if (modalType === 'indicacao') await cloud.salvarIndicacao({ ...vf });
-        if (modalType === 'usuario') await cloud.salvarUsuario({ ...vf });
-        if (modalType === 'empresa') await cloud.salvarEmpresa({ ...vf });
-        if (modalType === 'meta') await cloud.salvarMeta({ ...vf });
-        setModalType(null);
-      } catch (err) { alert("Erro ao salvar dados."); }
-    };
-    return (
-      <div className="fixed inset-0 bg-black/95 backdrop-blur-xl flex items-center justify-center z-[500] p-4 animate-in fade-in duration-300">
-        <div className="bg-[#111827] p-10 rounded-[3.5rem] w-full max-w-xl border border-gray-800 shadow-2xl overflow-y-auto max-h-[90vh] scrollbar-thin">
-          <div className="flex justify-between items-center mb-8"><h3 className="text-2xl font-black uppercase text-white tracking-tighter">Gerenciar {modalType === 'venda' ? 'Produção' : modalType === 'indicacao' ? 'Lead' : modalType}</h3><button onClick={() => setModalType(null)} className="text-gray-500 hover:text-white transition"><i className="fas fa-times text-xl"></i></button></div>
-          <form onSubmit={save} className="space-y-6">
-            {(modalType === 'usuario' || modalType === 'empresa' || modalType === 'indicacao' || modalType === 'venda') && (
-              <div className="space-y-1"><label className="text-[10px] font-black text-gray-500 uppercase ml-2">Nome Completo</label><input value={vf.cliente || vf.nome || ''} onChange={e => setVf({...vf, [modalType === 'usuario' || modalType === 'empresa' ? 'nome' : 'cliente']: e.target.value})} placeholder="NOME" className="w-full p-5 bg-[#0f172a] border border-gray-800 rounded-2xl text-white font-bold outline-none uppercase focus:border-blue-500" required /></div>
-            )}
-            {modalType === 'usuario' && (
-              <div className="space-y-4"><input value={vf.login || ''} onChange={e => setVf({...vf, login: e.target.value})} placeholder="LOGIN" className="w-full p-5 bg-[#0f172a] border border-gray-800 rounded-2xl text-white font-bold outline-none uppercase" required /><input type="password" value={vf.senha || ''} onChange={e => setVf({...vf, senha: e.target.value})} placeholder="SENHA" className="w-full p-5 bg-[#0f172a] border border-gray-800 rounded-2xl text-white font-bold outline-none" required /><select value={vf.setor || 'VENDEDOR'} onChange={e => setVf({...vf, setor: e.target.value})} className="w-full p-5 bg-[#0f172a] border border-gray-800 rounded-2xl text-white font-bold outline-none uppercase"><option value="VENDEDOR">VENDEDOR</option><option value="ADMIN">ADMIN</option></select><input type="number" value={vf.comissao || 0} onChange={e => setVf({...vf, comissao: Number(e.target.value)})} placeholder="COMISSÃO (%)" className="w-full p-5 bg-[#0f172a] border border-gray-800 rounded-2xl text-white font-bold outline-none" /></div>
-            )}
-            {modalType === 'meta' && (
-              <div className="space-y-5">
-                <div className="bg-[#0f172a] p-4 rounded-2xl border border-gray-800 mb-4">
-                  <p className="text-[10px] font-black uppercase text-purple-400">Objetivo Estratégico</p>
-                  <p className="text-xl font-black text-white">{vf.vendedor === 'EMPRESA_VM_SEGUROS' ? 'VM SEGUROS (GLOBAL)' : vf.vendedor}</p>
-                </div>
-                
-                <div className="space-y-1">
-                  <label className="text-[10px] font-black text-gray-500 uppercase ml-2">
-                    {vf.vendedor === 'EMPRESA_VM_SEGUROS' ? 'META PRÊMIO MENSAL (TOTAL EMPRESA)' : 'META PRÊMIO (R$)'}
-                  </label>
-                  <input type="number" step="0.01" value={vf.meta_premio || 0} onChange={e => setVf({...vf, meta_premio: Number(e.target.value)})} placeholder="0.00" className="w-full p-5 bg-[#0f172a] border border-gray-800 rounded-2xl text-white font-bold outline-none focus:border-green-500" />
-                </div>
-
-                <div className="space-y-1">
-                  <label className="text-[10px] font-black text-gray-500 uppercase ml-2">
-                    {vf.vendedor === 'EMPRESA_VM_SEGUROS' ? 'META QUANTIDADE DE VENDAS (TOTAL EMPRESA)' : 'META QUANTIDADE'}
-                  </label>
-                  <input type="number" value={vf.meta_qtd || 0} onChange={e => setVf({...vf, meta_qtd: Number(e.target.value)})} placeholder="EX: 50" className="w-full p-5 bg-[#0f172a] border border-gray-800 rounded-2xl text-white font-bold outline-none focus:border-blue-500" />
-                </div>
-
-                <div className="space-y-1">
-                  <label className="text-[10px] font-black text-gray-500 uppercase ml-2">
-                    {vf.vendedor === 'EMPRESA_VM_SEGUROS' ? 'META COMISSÃO BRUTA (TOTAL EMPRESA)' : 'META SALARIAL (R$)'}
-                  </label>
-                  <input type="number" step="0.01" value={vf.meta_salario || 0} onChange={e => setVf({...vf, meta_salario: Number(e.target.value)})} placeholder="0.00" className="w-full p-5 bg-[#0f172a] border border-gray-800 rounded-2xl text-white font-bold outline-none focus:border-yellow-500" />
-                </div>
-              </div>
-            )}
-            {modalType === 'indicacao' && (
-               <div className="space-y-5"><div className="grid grid-cols-2 gap-4"><div className="space-y-1"><label className="text-[10px] font-black text-gray-500 uppercase ml-2">WhatsApp / Tel</label><input value={vf.tel || ''} onChange={e => setVf({...vf, tel: e.target.value})} placeholder="(00) 00000-0000" className="w-full p-5 bg-[#0f172a] border border-gray-800 rounded-2xl text-white font-bold outline-none focus:border-yellow-500" required /></div><div className="space-y-1"><label className="text-[10px] font-black text-gray-500 uppercase ml-2">Veículo</label><input value={vf.veiculo || ''} onChange={e => setVf({...vf, veiculo: e.target.value})} placeholder="MODELO" className="w-full p-5 bg-[#0f172a] border border-gray-800 rounded-2xl text-white font-bold outline-none uppercase focus:border-yellow-500" required /></div></div><div className="grid grid-cols-2 gap-4"><div className="space-y-1"><label className="text-[10px] font-black text-gray-500 uppercase ml-2">Vendedor Atribuído</label><select disabled={!user?.isAdmin} value={vf.vendedor || user?.nome || ''} onChange={e => setVf({...vf, vendedor: e.target.value})} className={`w-full p-5 bg-[#0f172a] border border-gray-800 rounded-2xl text-white font-bold outline-none uppercase ${!user?.isAdmin ? 'opacity-50 cursor-not-allowed' : 'focus:border-yellow-500'}`}>{usuarios.map(u => <option key={u.id} value={u.nome}>{u.nome}</option>)}</select></div><div className="space-y-1"><label className="text-[10px] font-black text-gray-500 uppercase ml-2">Status do Funil</label><select value={vf.status || 'NOVA INDICAÇÃO'} onChange={e => setVf({...vf, status: e.target.value})} className="w-full p-5 bg-[#0f172a] border border-gray-800 rounded-2xl text-white font-bold outline-none uppercase focus:border-yellow-500">{INDICACAO_STATUS_MAP.map(s => <option key={s} value={s}>{s}</option>)}</select></div></div><div className="space-y-1"><label className="text-[10px] font-black text-gray-500 uppercase ml-2">Notas Adicionais</label><textarea value={vf.info || ''} onChange={e => setVf({...vf, info: e.target.value})} placeholder="DETALHES..." className="w-full p-5 bg-[#0f172a] border border-gray-800 rounded-2xl text-white font-bold outline-none h-32 uppercase focus:border-yellow-500"></textarea></div><div className="flex items-center gap-4 bg-[#0f172a] p-4 rounded-2xl border border-gray-800"><input type="checkbox" checked={vf.suhai || false} onChange={e => setVf({...vf, suhai: e.target.checked})} className="w-6 h-6 accent-green-500" /><label className="text-xs font-black uppercase text-green-500">Suhai Gold</label></div></div>
-            )}
-            {modalType === 'venda' && (
-              <div className="space-y-5"><div className="space-y-1"><label className="text-[10px] font-black text-gray-500 uppercase ml-2">WhatsApp / Telefone</label><input value={vf.tel || ''} onChange={e => setVf({...vf, tel: e.target.value})} placeholder="(00) 00000-0000" className="w-full p-5 bg-[#0f172a] border border-gray-800 rounded-2xl text-white font-bold outline-none focus:border-blue-500" /></div><div className="grid grid-cols-2 gap-4"><div className="space-y-1"><label className="text-[10px] font-black text-gray-500 uppercase ml-2">Vendedor Responsável</label><select disabled={!user?.isAdmin} value={vf.vendedor || user?.nome || ''} onChange={e => setVf({...vf, vendedor: e.target.value})} className={`w-full p-5 bg-[#0f172a] border border-gray-800 rounded-2xl text-white font-bold outline-none uppercase ${!user?.isAdmin ? 'opacity-50 cursor-not-allowed' : 'focus:border-blue-500'}`}>{usuarios.map(u => <option key={u.id} value={u.nome}>{u.nome}</option>)}</select></div><div className="space-y-1"><label className="text-[10px] font-black text-gray-500 uppercase ml-2">Status da Venda</label><select value={vf.status || 'Fazer Vistoria'} onChange={e => setVf({...vf, status: e.target.value})} className="w-full p-5 bg-[#0f172a] border border-gray-800 rounded-2xl text-white font-bold outline-none uppercase focus:border-blue-500">{VENDA_STATUS_MAP.map(s => <option key={s} value={s}>{s}</option>)}</select></div></div><div className="space-y-1"><label className="text-[10px] font-black text-gray-500 uppercase ml-2">Companhia Seguradora</label><select value={vf.empresa || ''} onChange={e => setVf({...vf, empresa: e.target.value})} className="w-full p-5 bg-[#0f172a] border border-gray-800 rounded-2xl text-white font-bold outline-none uppercase focus:border-blue-500"><option value="">SELECIONE SEGURADORA</option>{empresas.map(e => <option key={e.id} value={e.nome}>{e.nome}</option>)}</select></div><div className="grid grid-cols-2 gap-4"><div className="space-y-1"><label className="text-[10px] font-black text-blue-500 uppercase ml-2">Prêmio Líquido (R$)</label><input type="number" step="0.01" value={vf.valor || 0} onChange={e => setVf({...vf, valor: Number(e.target.value)})} placeholder="0,00" className="w-full p-5 bg-[#0f172a] border border-gray-800 rounded-2xl text-white font-bold outline-none focus:border-blue-500" /></div><div className="space-y-1"><label className="text-[10px] font-black text-yellow-500 uppercase ml-2">Comissão Cheia (R$)</label><input type="number" step="0.01" value={vf.comissao_cheia || 0} onChange={e => setVf({...vf, comissao_cheia: Number(e.target.value)})} placeholder="0,00" className="w-full p-5 bg-[#0f172a] border border-gray-800 rounded-2xl text-white font-bold outline-none focus:border-yellow-500" /></div></div><div className="space-y-1"><label className="text-[10px] font-black text-green-500 uppercase ml-2">Sua Parte / Vendedor (R$)</label><input type="number" step="0.01" value={vf.comissao_vendedor || 0} onChange={e => setVf({...vf, comissao_vendedor: Number(e.target.value)})} placeholder="0,00" className="w-full p-5 bg-[#0f172a] border border-gray-800 rounded-2xl text-white font-bold outline-none focus:border-green-500" /></div><div className="flex items-center gap-4 bg-[#0f172a] p-4 rounded-2xl border border-gray-800"><input type="checkbox" checked={vf.suhai || false} onChange={e => setVf({...vf, suhai: e.target.checked})} className="w-6 h-6 accent-green-500" /><label className="text-xs font-black uppercase text-green-500">Marcar como Suhai Gold</label></div></div>
-            )}
-            <div className="flex gap-4 pt-8"><button type="button" onClick={() => setModalType(null)} className="flex-1 bg-gray-800 p-6 rounded-[2rem] font-black uppercase text-white hover:bg-gray-700 transition-all">Cancelar</button><button type="submit" className="flex-1 bg-blue-600 p-6 rounded-[2rem] font-black uppercase text-white shadow-xl shadow-blue-600/20 hover:scale-105 transition-all">Salvar Dados</button></div>
-          </form>
-        </div>
-      </div>
-    );
-  };
-
   if (!isAuthenticated) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-[#0b0f1a]">
-        <div className="bg-[#111827] p-12 rounded-[3.5rem] shadow-2xl w-full max-w-md border border-gray-800 text-center animate-in zoom-in-95 duration-700">
-          <h1 className="text-4xl font-black mb-1 uppercase tracking-tighter text-white font-mono">VM SEGUROS</h1><p className="text-gray-500 text-[10px] mb-12 uppercase font-black tracking-[0.4em]">Elite Cloud System</p>
-          <div className="space-y-5"><input type="text" placeholder="LOGIN" className="w-full p-6 rounded-2xl border border-gray-800 bg-[#0f172a] text-white text-sm font-bold uppercase outline-none focus:border-blue-500" value={loginForm.username} onChange={e => setLoginForm({...loginForm, username: e.target.value})} /><input type="password" placeholder="SENHA" className="w-full p-6 rounded-2xl border border-gray-800 bg-[#0f172a] text-white text-sm font-bold outline-none focus:border-blue-500" value={loginForm.password} onChange={e => setLoginForm({...loginForm, password: e.target.value})} onKeyDown={e => e.key === 'Enter' && handleLogin()} /><button onClick={handleLogin} className="w-full bg-blue-600 hover:bg-blue-500 p-6 rounded-[2rem] font-black uppercase text-white transition-all shadow-2xl">Acessar CRM</button></div>
+      <div className="flex items-center justify-center min-h-screen bg-[#0b0f1a] p-4">
+        <div className="bg-[#111827] p-12 rounded-[3.5rem] border border-gray-800 w-full max-w-md shadow-2xl animate-in zoom-in duration-500">
+          <h2 className="text-3xl font-black uppercase mb-10 text-center tracking-tighter text-white">Cloud CRM Login</h2>
+          <div className="space-y-5">
+            <input type="text" placeholder="Usuário" className="w-full p-5 bg-[#0f172a] border border-gray-800 rounded-2xl text-[11px] font-bold text-white uppercase outline-none focus:border-blue-500 transition-all" value={loginForm.username} onChange={e => setLoginForm({...loginForm, username: e.target.value})} />
+            <input type="password" placeholder="Senha" className="w-full p-5 bg-[#0f172a] border border-gray-800 rounded-2xl text-[11px] font-bold text-white outline-none focus:border-blue-500 transition-all" value={loginForm.password} onChange={e => setLoginForm({...loginForm, password: e.target.value})} />
+            <button onClick={handleLogin} className="w-full bg-blue-600 hover:bg-blue-500 p-5 rounded-2xl font-black uppercase text-[11px] text-white transition-all shadow-xl shadow-blue-900/20">Acessar Sistema</button>
+          </div>
         </div>
       </div>
     );
@@ -939,25 +545,218 @@ const App: React.FC = () => {
 
   return (
     <Layout user={user!} onLogout={logout} activeSection={activeSection} setActiveSection={setActiveSection}>
-      <div className="max-w-[1600px] mx-auto h-full p-2">
-        {activeSection === 'dashboard' && <Dashboard />}
-        {activeSection === 'kanban-indicacoes' && <KanbanIndicacoes />}
-        {activeSection === 'kanban-vendas' && <KanbanVendas />}
-        {activeSection === 'comissao' && <Financeiro />}
-        {activeSection === 'cadastrar-indicacao' && <FormLead />}
-        {activeSection === 'vendedores' && <VendedoresView />}
-        {activeSection === 'metas' && <MetasView />}
-        {activeSection === 'lead-suhai-page' && <LeadSuhaiView />}
-        {activeSection === 'performance' && <PerformanceTeamView />}
-        {activeSection === 'configuracoes' && <ConfiguracoesView />}
-        {activeSection === 'links-uteis' && (
-          <div className="animate-in fade-in duration-500 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
-             <a href="https://suhai.com.br" target="_blank" className="bg-[#111827] p-8 rounded-[2.5rem] border border-gray-800 flex items-center justify-between hover:border-green-500 transition-all"><span className="font-black uppercase text-white">Suhai Seguradora</span><i className="fas fa-external-link-alt text-gray-600"></i></a>
-             <a href="https://vmsolutions.com.br" target="_blank" className="bg-[#111827] p-8 rounded-[2.5rem] border border-gray-800 flex items-center justify-between hover:border-blue-500 transition-all"><span className="font-black uppercase text-white">Portal VM Solutions</span><i className="fas fa-external-link-alt text-gray-600"></i></a>
+      {activeSection === 'dashboard' && <DashboardView vendas={vendas} indicacoes={indicacoes} metas={metas} user={user} />}
+      
+      {activeSection === 'kanban-vendas' && (
+        <div className="space-y-8 animate-in fade-in duration-500">
+          <div className="flex justify-between items-center">
+            <div><h2 className="text-4xl font-black uppercase text-[#3b82f6] tracking-tighter">PRODUÇÃO</h2><p className="text-[10px] font-bold text-gray-500 uppercase tracking-widest mt-1">Gestão Completa de Apólices</p></div>
+            <div className="flex gap-4">
+              {selectedVendas.length > 0 && <button onClick={deleteSelectedVendas} className="bg-red-600 text-white px-8 py-4 rounded-2xl font-black uppercase text-[11px] shadow-lg hover:bg-red-500 transition-all">Excluir Selecionados ({selectedVendas.length})</button>}
+              <button onClick={() => { setEditingItem({ status: 'Fazer Vistoria', dataCriacao: Date.now(), suhai: false }); setModalType('venda'); }} className="bg-blue-600 text-white px-10 py-4 rounded-2xl font-black uppercase text-[11px] shadow-lg shadow-blue-900/40 hover:scale-105 active:scale-95 transition-all">Lançar Venda</button>
+            </div>
           </div>
-        )}
-      </div>
-      <ModalForm />
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-8">
+            <div className="relative"><i className="fas fa-search absolute left-5 top-1/2 -translate-y-1/2 text-gray-600"></i><input type="text" placeholder="PESQUISAR PRODUÇÃO..." className="w-full bg-[#111827] border border-gray-800 pl-14 pr-6 py-5 rounded-2xl text-[10px] font-black uppercase text-white outline-none focus:border-blue-500 transition-all" value={searchTerm} onChange={e => setSearchTerm(e.target.value)} /></div>
+            <select className="w-full bg-[#111827] border border-gray-800 px-6 py-5 rounded-2xl text-[10px] font-black uppercase text-gray-400 outline-none focus:border-blue-500 transition-all" value={salesmanFilter} onChange={e => setSalesmanFilter(e.target.value)}><option value="TODOS">TODOS VENDEDORES</option>{Array.from(new Set([...usuarios.map(u => u.nome), 'ELEN JACONIS'])).map(nome => <option key={nome} value={nome}>{nome}</option>)}</select>
+          </div>
+          <div className="flex gap-6 overflow-x-auto pb-8 scrollbar-thin h-[calc(100vh-280px)]">
+            {VENDA_STATUS_MAP.map(status => (
+              <div key={status} className="kanban-column flex flex-col w-[350px] bg-[#0b0f1a]/50 rounded-[2.5rem] border border-gray-800/50 p-4">
+                <div className="flex justify-center items-center mb-6 py-4 border-b border-gray-800/30"><h3 className="text-[10px] font-black uppercase text-gray-500 tracking-[0.2em]">{status}</h3></div>
+                <div className="flex-1 space-y-6 overflow-y-auto pr-2 scrollbar-thin">
+                  {filteredVendas.filter(v => v.status === status).map(v => (
+                    <div key={v.id} className="bg-[#111827] rounded-[2rem] border border-blue-900/20 p-8 shadow-sm hover:border-blue-600/50 transition-all group relative overflow-hidden">
+                      <input type="checkbox" checked={selectedVendas.includes(v.id!)} onChange={(e) => e.target.checked ? setSelectedVendas([...selectedVendas, v.id!]) : setSelectedVendas(selectedVendas.filter(id => id !== v.id))} className="absolute top-8 left-8 w-4 h-4 rounded border-gray-800 bg-gray-900 checked:bg-blue-600 transition-all" />
+                      <button onClick={() => { setEditingItem(v); setModalType('venda'); }} className="absolute top-8 right-8 text-gray-600 hover:text-white transition"><i className="fas fa-pencil-alt text-[10px]"></i></button>
+                      <div className="pl-6 space-y-5">
+                        <div><p className="text-sm font-black text-white uppercase leading-tight mb-2">{v.cliente}</p><div className="flex items-center gap-2 text-[10px] font-bold text-blue-500"><i className="fas fa-phone-alt"></i><span>{v.tel}</span></div><p className="text-[9px] font-black text-gray-600 uppercase mt-2 tracking-widest">{v.empresa || 'SUHAI SEGURADORA'}</p></div>
+                        <div className="text-center py-5 bg-[#0b0f1a]/50 rounded-2xl border border-gray-800/50"><p className="text-[8px] font-black text-gray-500 uppercase mb-1">Prêmio Líquido</p><h4 className="text-xl font-black text-white">{FORMAT_BRL(v.valor)}</h4></div>
+                        <div className="grid grid-cols-2 gap-4"><div className="p-4 rounded-xl border border-gray-800 bg-[#0b0f1a]/30 text-center"><p className="text-[7px] font-black text-gray-600 uppercase mb-1">C. Cheia</p><p className="text-[10px] font-black text-white">{FORMAT_BRL(v.comissao_cheia)}</p></div><div className="p-4 rounded-xl border border-gray-800 bg-[#0b0f1a]/30 text-center"><p className="text-[7px] font-black text-[#10b981] uppercase mb-1">Sua Parte</p><p className="text-[10px] font-black text-[#10b981]">{FORMAT_BRL(v.comissao_vendedor)}</p></div></div>
+                        <div className="flex justify-between items-center pt-5 mt-2 border-t border-gray-800/50">
+                           <button onClick={() => moveVenda(v, 'left')} className="w-8 h-8 rounded-full bg-gray-900 flex items-center justify-center text-gray-600 hover:text-white transition"><i className="fas fa-chevron-left text-[9px]"></i></button>
+                           <span className="text-[9px] font-black text-blue-400 uppercase tracking-tighter">{v.vendedor}</span>
+                           <button onClick={() => moveVenda(v, 'right')} className="w-8 h-8 rounded-full bg-gray-900 flex items-center justify-center text-gray-600 hover:text-white transition"><i className="fas fa-chevron-right text-[9px]"></i></button>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {activeSection === 'kanban-indicacoes' && (
+        <div className="space-y-8 animate-in fade-in duration-500">
+          <div className="flex justify-between items-center">
+            <div><h2 className="text-4xl font-black uppercase text-[#eab308] tracking-tighter">LEADS</h2><p className="text-[10px] font-bold text-gray-500 uppercase tracking-widest mt-1">SELECIONE PARA EXCLUIR EM MASSA</p></div>
+            <div className="flex gap-4">
+              {selectedLeads.length > 0 && <button onClick={deleteSelectedLeads} className="bg-red-600 text-white px-8 py-4 rounded-2xl font-black uppercase text-[11px] shadow-lg hover:bg-red-500 transition-all">Excluir Selecionados ({selectedLeads.length})</button>}
+              <button onClick={() => { setEditingItem({ status: 'NOVA INDICAÇÃO', dataCriacao: Date.now(), suhai: false }); setModalType('indicacao'); }} className="bg-yellow-500 text-black px-10 py-4 rounded-2xl font-black uppercase text-[11px] shadow-lg shadow-yellow-900/40 hover:scale-105 active:scale-95 transition-all">Novo Lead</button>
+            </div>
+          </div>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-8">
+            <div className="relative"><i className="fas fa-search absolute left-5 top-1/2 -translate-y-1/2 text-gray-600"></i><input type="text" placeholder="BUSCAR LEADS..." className="w-full bg-[#111827] border border-gray-800 pl-14 pr-6 py-5 rounded-2xl text-[10px] font-black uppercase text-white outline-none focus:border-yellow-500 transition-all" value={searchTerm} onChange={e => setSearchTerm(e.target.value)} /></div>
+            <select className="w-full bg-[#111827] border border-gray-800 px-6 py-5 rounded-2xl text-[10px] font-black uppercase text-gray-400 outline-none focus:border-blue-500 transition-all" value={salesmanFilter} onChange={e => setSalesmanFilter(e.target.value)}><option value="TODOS">TODOS VENDEDORES</option>{Array.from(new Set([...usuarios.map(u => u.nome), 'ELEN JACONIS'])).map(nome => <option key={nome} value={nome}>{nome}</option>)}</select>
+          </div>
+          <div className="flex gap-6 overflow-x-auto pb-8 scrollbar-thin h-[calc(100vh-280px)]">
+            {INDICACAO_STATUS_MAP.map(status => (
+              <div key={status} className="kanban-column flex flex-col w-[350px] bg-[#0b0f1a]/50 rounded-[2.5rem] border border-gray-800/50 p-4">
+                <div className="flex justify-center items-center mb-6 py-4 border-b border-gray-800/30"><h3 className="text-[10px] font-black uppercase text-gray-500 tracking-[0.2em]">{status}</h3></div>
+                <div className="flex-1 space-y-6 overflow-y-auto pr-2 scrollbar-thin">
+                  {filteredIndicacoes.filter(i => i.status === status).map(i => (
+                    <div key={i.id} className="bg-[#111827] rounded-[2rem] border border-yellow-900/20 p-8 shadow-sm hover:border-yellow-500/50 transition-all group relative overflow-hidden">
+                      <input type="checkbox" checked={selectedLeads.includes(i.id!)} onChange={(e) => e.target.checked ? setSelectedLeads([...selectedLeads, i.id!]) : setSelectedLeads(selectedLeads.filter(id => id !== i.id))} className="absolute top-8 left-8 w-4 h-4 rounded border-gray-800 bg-gray-900 checked:bg-yellow-500 transition-all" />
+                      <div className="absolute top-8 right-8 flex gap-3"><button onClick={() => cloud.apagar('indicacoes', i.id!)} className="text-red-500/30 hover:text-red-500 transition"><i className="fas fa-trash-alt text-[10px]"></i></button><button onClick={() => { setEditingItem(i); setModalType('indicacao'); }} className="text-gray-600 hover:text-white transition"><i className="fas fa-pencil-alt text-[10px]"></i></button></div>
+                      <div className="pl-6 space-y-5">
+                        <div><p className="text-sm font-black text-white uppercase leading-tight mb-2">{i.cliente}</p><div className="flex items-center gap-2 text-[10px] font-bold text-yellow-500"><i className="fab fa-whatsapp"></i><span>{i.tel}</span></div><p className="text-[10px] font-black text-gray-500 uppercase mt-2 tracking-widest">{i.veiculo || 'SEM VEÍCULO'}</p></div>
+                        <div className="flex flex-col pt-5 mt-2 border-t border-gray-800/50">
+                           <div className="flex justify-between items-center mb-1">
+                             <button onClick={() => moveIndicacao(i, 'left')} className="w-8 h-8 rounded-full bg-gray-900 flex items-center justify-center text-gray-600 hover:text-white transition"><i className="fas fa-chevron-left text-[9px]"></i></button>
+                             <span className="text-[9px] font-black text-gray-500 uppercase tracking-tighter">{i.vendedor || 'SEM VENDEDOR'}</span>
+                             <button onClick={() => moveIndicacao(i, 'right')} className="w-8 h-8 rounded-full bg-gray-900 flex items-center justify-center text-gray-600 hover:text-white transition"><i className="fas fa-chevron-right text-[9px]"></i></button>
+                           </div>
+                           {i.suhai && <div className="text-center s-suhai-pulse text-[8px] uppercase tracking-widest mt-1 opacity-60">Suhai</div>}
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {activeSection === 'comissao' && <FinanceiroView vendas={vendas} user={user} />}
+      {activeSection === 'performance' && <PerformanceView vendas={vendas} usuarios={usuarios} onDeleteSalesmanSales={async (nome) => { if(window.confirm(`Limpar produção de ${nome}?`)) { const toDelete = vendas.filter(v => v.vendedor === nome); for(const v of toDelete) await cloud.apagar('vendas', v.id!); } }} />}
+      {activeSection === 'metas' && <MetasView metas={metas} usuarios={usuarios} onEdit={(m) => { setEditingItem(m); setModalType('meta'); }} />}
+      {activeSection === 'lead-suhai-page' && <LeadSuhaiView vendas={vendas} user={user} />}
+      
+      {activeSection === 'configuracoes' && (
+        <div className="space-y-10 animate-in fade-in duration-500 max-w-[1600px] mx-auto">
+          <div className="flex justify-between items-center"><h2 className="text-4xl font-black uppercase text-gray-400 tracking-tighter">CONFIGURAÇÕES</h2><button onClick={() => { setEditingItem({}); setModalType('empresa'); }} className="bg-[#374151] hover:bg-gray-600 text-[10px] font-black uppercase text-white px-8 py-4 rounded-2xl shadow-xl transition-all">NOVA SEGURADORA</button></div>
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
+            {empresas.map(e => (
+              <div key={e.id} className="bg-[#111827] rounded-[2.5rem] p-10 border border-gray-800 relative shadow-xl hover:border-gray-600 transition-all group overflow-hidden">
+                <div className="absolute left-0 top-1/2 -translate-y-1/2 w-1.5 h-1/2 bg-gray-600 rounded-r-full group-hover:h-3/4 transition-all"></div>
+                <div className="pl-6 flex justify-between items-center"><h3 className="text-sm font-black uppercase text-white tracking-widest leading-none">{e.nome}</h3><button onClick={() => cloud.apagar('empresas', e.id!)} className="text-red-500/20 hover:text-red-500 transition-all"><i className="fas fa-trash-alt text-xs"></i></button></div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {activeSection === 'cadastrar-indicacao' && (
+        <div className="flex flex-col items-center justify-center min-h-full py-10 animate-in fade-in zoom-in duration-500">
+          <div className="bg-[#111827] w-full max-w-2xl rounded-[3rem] p-12 border border-gray-800 shadow-2xl space-y-10">
+            <h2 className="text-2xl font-black text-yellow-500 text-center uppercase tracking-widest">DISTRIBUIR LEAD</h2>
+            <div className="space-y-6">
+              <div className="space-y-2"><label className="text-[10px] font-black uppercase text-gray-500">NOME DO CLIENTE</label><input className="w-full bg-[#0b0f1a] border border-gray-800 p-6 rounded-2xl text-[11px] font-bold text-white uppercase outline-none focus:border-yellow-500 transition-all" placeholder="NOME COMPLETO" value={distribuirForm.cliente} onChange={e => setDistribuirForm({...distribuirForm, cliente: e.target.value.toUpperCase()})} /></div>
+              <div className="grid grid-cols-2 gap-6">
+                <div className="space-y-2"><label className="text-[10px] font-black uppercase text-gray-500">WHATSAPP / TEL</label><input className="w-full bg-[#0b0f1a] border border-gray-800 p-6 rounded-2xl text-[11px] font-bold text-white outline-none focus:border-yellow-500 transition-all" placeholder="(00) 00000-0000" value={distribuirForm.tel} onChange={e => setDistribuirForm({...distribuirForm, tel: e.target.value})} /></div>
+                <div className="space-y-2"><label className="text-[10px] font-black uppercase text-gray-500">VEÍCULO</label><input className="w-full bg-[#0b0f1a] border border-gray-800 p-6 rounded-2xl text-[11px] font-bold text-white uppercase outline-none focus:border-yellow-500 transition-all" placeholder="MARCA / MODELO" value={distribuirForm.veiculo} onChange={e => setDistribuirForm({...distribuirForm, veiculo: e.target.value.toUpperCase()})} /></div>
+              </div>
+              <div className="space-y-2"><label className="text-[10px] font-black uppercase text-gray-500">ATRIBUIR AO VENDEDOR</label><select className="w-full bg-[#0b0f1a] border border-gray-800 p-6 rounded-2xl text-[11px] font-bold text-white uppercase outline-none focus:border-yellow-500 appearance-none transition-all" value={distribuirForm.vendedor} onChange={e => setDistribuirForm({...distribuirForm, vendedor: e.target.value})}><option value="">SELECIONE VENDEDOR</option>{Array.from(new Set([...usuarios.map(u => u.nome), 'ELEN JACONIS'])).map(nome => <option key={nome} value={nome}>{nome}</option>)}</select></div>
+              
+              {/* Checkbox Suhai solicitado no formulário */}
+              <div className="flex items-center gap-3 p-2 bg-green-500/5 rounded-xl border border-green-500/10">
+                <input 
+                  type="checkbox" 
+                  id="lead-suhai-check"
+                  checked={distribuirForm.suhai || false} 
+                  onChange={e => setDistribuirForm({...distribuirForm, suhai: e.target.checked})} 
+                  className="w-5 h-5 rounded border-gray-800 bg-gray-900 checked:bg-green-500" 
+                />
+                <label htmlFor="lead-suhai-check" className="text-[11px] font-black uppercase text-green-500 cursor-pointer">Marcar como Lead Suhai</label>
+              </div>
+
+              <div className="space-y-2"><label className="text-[10px] font-black uppercase text-gray-500">NOTAS ADICIONAIS</label><textarea className="w-full bg-[#0b0f1a] border border-gray-800 p-6 rounded-2xl text-[11px] font-bold text-white outline-none focus:border-yellow-500 h-32 scrollbar-thin resize-none transition-all" placeholder="DETALHES DO LEAD..." value={distribuirForm.info} onChange={e => setDistribuirForm({...distribuirForm, info: e.target.value})}></textarea></div>
+            </div>
+            <button onClick={async () => { if (!distribuirForm.cliente || !distribuirForm.vendedor) return alert("Preencha o nome do cliente e o vendedor."); await cloud.salvarIndicacao(distribuirForm as Indicacao); alert("Lead distribuído com sucesso!"); setDistribuirForm({ status: 'NOVA INDICAÇÃO', suhai: false, info: '', cliente: '', tel: '', veiculo: '', vendedor: '' }); }} className="w-full bg-yellow-500 hover:bg-yellow-400 text-black p-6 rounded-3xl font-black uppercase text-xs shadow-xl shadow-yellow-900/20 active:scale-95 transition-all">CONFIRMAR ENVIO</button>
+          </div>
+        </div>
+      )}
+
+      {activeSection === 'vendedores' && (
+        <div className="space-y-10 animate-in fade-in duration-500 max-w-[1600px] mx-auto">
+          <div className="flex justify-between items-center"><h2 className="text-4xl font-black uppercase text-[#ef4444] tracking-tighter">EQUIPE</h2><button onClick={() => { setEditingItem({ setor: 'VENDEDOR', comissao: 30 }); setModalType('usuario'); }} className="bg-[#ef4444] text-white px-10 py-4 rounded-2xl font-black uppercase text-[11px] shadow-lg shadow-red-900/40 hover:scale-105 active:scale-95 transition-all">Novo Usuário</button></div>
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
+            {usuarios.filter(u => u.setor === 'VENDEDOR' || u.nome === 'ELEN JACONIS').map(u => (
+              <div key={u.id} className="bg-[#111827] rounded-[2.5rem] p-8 border border-gray-800 relative shadow-xl flex flex-col justify-between hover:border-red-500/30 transition-all group overflow-hidden">
+                <div className="absolute left-0 top-1/2 -translate-y-1/2 w-1.5 h-3/4 bg-[#ef4444] rounded-r-full group-hover:h-full transition-all"></div>
+                <div className="pl-4">
+                   <div className="flex justify-between items-start mb-1"><h3 className="text-xl font-black uppercase text-white tracking-tight leading-none">{u.nome}</h3><button onClick={() => { setEditingItem(u); setModalType('usuario'); }} className="text-gray-600 hover:text-white transition-all"><i className="fas fa-edit text-xs"></i></button></div>
+                   <p className="text-[9px] font-black text-gray-600 uppercase tracking-widest mb-10">Setor: {u.setor}</p>
+                   <div className="inline-block bg-red-500/10 text-[#ef4444] px-6 py-3 rounded-2xl text-[10px] font-black uppercase border border-red-500/10">{u.comissao}% Comissão</div>
+                </div>
+                <button onClick={() => cloud.apagar('usuarios', u.id!)} className="absolute bottom-6 right-8 text-red-500/20 hover:text-red-500 transition-all"><i className="fas fa-trash-alt text-xs"></i></button>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* MODALS */}
+      {modalType === 'venda' && (
+        <ModalWrapper title="GERENCIAR PRODUÇÃO" onClose={() => setModalType(null)} onSave={async () => { await cloud.salvarVenda(editingItem); setModalType(null); }}>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <div className="space-y-2 col-span-2"><label className="text-[9px] font-black uppercase text-gray-500">CLIENTE</label><input className="w-full bg-[#0b0f1a] border border-gray-800 p-4 rounded-xl text-[11px] font-bold text-white uppercase outline-none focus:border-blue-500" value={editingItem?.cliente || ''} onChange={e => setEditingItem({...editingItem, cliente: e.target.value.toUpperCase()})} /></div>
+            <div className="space-y-2"><label className="text-[9px] font-black uppercase text-gray-500">WHATSAPP</label><input className="w-full bg-[#0b0f1a] border border-gray-800 p-4 rounded-xl text-[11px] font-bold text-white outline-none focus:border-blue-500" value={editingItem?.tel || ''} onChange={e => setEditingItem({...editingItem, tel: e.target.value})} /></div>
+            <div className="space-y-2"><label className="text-[9px] font-black uppercase text-gray-500">SEGURADORA</label><select className="w-full bg-[#0b0f1a] border border-gray-800 p-4 rounded-xl text-[11px] font-bold text-white uppercase outline-none focus:border-blue-500" value={editingItem?.empresa || ''} onChange={e => setEditingItem({...editingItem, empresa: e.target.value})}>{empresas.map(emp => <option key={emp.id} value={emp.nome}>{emp.nome}</option>)}</select></div>
+            <div className="space-y-2"><label className="text-[9px] font-black uppercase text-gray-500">PRÊMIO LÍQUIDO</label><input type="number" className="w-full bg-[#0b0f1a] border border-gray-800 p-4 rounded-xl text-[11px] font-bold text-white outline-none focus:border-blue-500" value={editingItem?.valor || 0} onChange={e => setEditingItem({...editingItem, valor: Number(e.target.value)})} /></div>
+            <div className="space-y-2"><label className="text-[9px] font-black uppercase text-gray-500">COMISSÃO CHEIA</label><input type="number" className="w-full bg-[#0b0f1a] border border-gray-800 p-4 rounded-xl text-[11px] font-bold text-white outline-none focus:border-blue-500" value={editingItem?.comissao_cheia || 0} onChange={e => setEditingItem({...editingItem, comissao_cheia: Number(e.target.value)})} /></div>
+            <div className="space-y-2"><label className="text-[9px] font-black uppercase text-gray-500">SUA PARTE</label><input type="number" className="w-full bg-[#0b0f1a] border border-gray-800 p-4 rounded-xl text-[11px] font-bold text-white outline-none focus:border-blue-500" value={editingItem?.comissao_vendedor || 0} onChange={e => setEditingItem({...editingItem, comissao_vendedor: Number(e.target.value)})} /></div>
+            <div className="space-y-2"><label className="text-[9px] font-black uppercase text-gray-500">VENDEDOR</label><select className="w-full bg-[#0b0f1a] border border-gray-800 p-4 rounded-xl text-[11px] font-bold text-white uppercase outline-none focus:border-blue-500" value={editingItem?.vendedor || ''} onChange={e => setEditingItem({...editingItem, vendedor: e.target.value})}>{Array.from(new Set([...usuarios.map(u => u.nome), 'ELEN JACONIS'])).map(nome => <option key={nome} value={nome}>{nome}</option>)}</select></div>
+            <div className="space-y-2"><label className="text-[9px] font-black uppercase text-gray-500">STATUS</label><select className="w-full bg-[#0b0f1a] border border-gray-800 p-4 rounded-xl text-[11px] font-bold text-white uppercase outline-none focus:border-blue-500" value={editingItem?.status || 'Fazer Vistoria'} onChange={e => setEditingItem({...editingItem, status: e.target.value})}>{VENDA_STATUS_MAP.map(s => <option key={s} value={s}>{s}</option>)}</select></div>
+            <div className="flex items-center gap-2 pt-4"><input type="checkbox" checked={editingItem?.suhai || false} onChange={e => setEditingItem({...editingItem, suhai: e.target.checked})} className="w-4 h-4" /><label className="text-[10px] font-black uppercase text-gray-400">É LEAD SUHAI?</label></div>
+          </div>
+        </ModalWrapper>
+      )}
+
+      {modalType === 'indicacao' && (
+        <ModalWrapper title="GERENCIAR LEAD" onClose={() => setModalType(null)} onSave={async () => { await cloud.salvarIndicacao(editingItem); setModalType(null); }}>
+          <div className="space-y-6">
+            <div className="space-y-2"><label className="text-[9px] font-black uppercase text-gray-500">CLIENTE</label><input className="w-full bg-[#0b0f1a] border border-gray-800 p-4 rounded-xl text-[11px] font-bold text-white uppercase outline-none focus:border-yellow-500" value={editingItem?.cliente || ''} onChange={e => setEditingItem({...editingItem, cliente: e.target.value.toUpperCase()})} /></div>
+            <div className="grid grid-cols-2 gap-6">
+              <div className="space-y-2"><label className="text-[9px] font-black uppercase text-gray-500">TEL</label><input className="w-full bg-[#0b0f1a] border border-gray-800 p-4 rounded-xl text-[11px] font-bold text-white outline-none focus:border-yellow-500" value={editingItem?.tel || ''} onChange={e => setEditingItem({...editingItem, tel: e.target.value})} /></div>
+              <div className="space-y-2"><label className="text-[9px] font-black uppercase text-gray-500">VEÍCULO</label><input className="w-full bg-[#0b0f1a] border border-gray-800 p-4 rounded-xl text-[11px] font-bold text-white uppercase outline-none focus:border-yellow-500" value={editingItem?.veiculo || ''} onChange={e => setEditingItem({...editingItem, veiculo: e.target.value.toUpperCase()})} /></div>
+            </div>
+            <div className="space-y-2"><label className="text-[9px] font-black uppercase text-gray-500">VENDEDOR</label><select className="w-full bg-[#0b0f1a] border border-gray-800 p-4 rounded-xl text-[11px] font-bold text-white uppercase outline-none focus:border-yellow-500" value={editingItem?.vendedor || ''} onChange={e => setEditingItem({...editingItem, vendedor: e.target.value})}>{Array.from(new Set([...usuarios.map(u => u.nome), 'ELEN JACONIS'])).map(nome => <option key={nome} value={nome}>{nome}</option>)}</select></div>
+            <div className="flex items-center gap-2 pt-2"><input type="checkbox" checked={editingItem?.suhai || false} onChange={e => setEditingItem({...editingItem, suhai: e.target.checked})} className="w-4 h-4 rounded" /><label className="text-[10px] font-black uppercase text-gray-400">É LEAD SUHAI?</label></div>
+            <div className="space-y-2"><label className="text-[9px] font-black uppercase text-gray-500">STATUS</label><select className="w-full bg-[#0b0f1a] border border-gray-800 p-4 rounded-xl text-[11px] font-bold text-white uppercase outline-none focus:border-yellow-500" value={editingItem?.status || 'NOVA INDICAÇÃO'} onChange={e => setEditingItem({...editingItem, status: e.target.value})}>{INDICACAO_STATUS_MAP.map(s => <option key={s} value={s}>{s}</option>)}</select></div>
+          </div>
+        </ModalWrapper>
+      )}
+
+      {modalType === 'usuario' && (
+        <ModalWrapper title="CONFIGURAR USUÁRIO" onClose={() => setModalType(null)} onSave={async () => { await cloud.salvarUsuario(editingItem); setModalType(null); }}>
+          <div className="space-y-6">
+            <div className="space-y-2"><label className="text-[9px] font-black uppercase text-gray-500">NOME</label><input className="w-full bg-[#0b0f1a] border border-gray-800 p-4 rounded-xl text-[11px] font-bold text-white" value={editingItem?.nome || ''} onChange={e => setEditingItem({...editingItem, nome: e.target.value.toUpperCase()})} /></div>
+            <div className="space-y-2"><label className="text-[9px] font-black uppercase text-gray-500">LOGIN</label><input className="w-full bg-[#0b0f1a] border border-gray-800 p-4 rounded-xl text-[11px] font-bold text-white" value={editingItem?.login || ''} onChange={e => setEditingItem({...editingItem, login: e.target.value})} /></div>
+            <div className="space-y-2"><label className="text-[9px] font-black uppercase text-gray-500">SENHA</label><input className="w-full bg-[#0b0f1a] border border-gray-800 p-4 rounded-xl text-[11px] font-bold text-white" value={editingItem?.senha || ''} onChange={e => setEditingItem({...editingItem, senha: e.target.value})} /></div>
+          </div>
+        </ModalWrapper>
+      )}
+
+      {modalType === 'meta' && (
+        <ModalWrapper title="CONFIGURAR META" onClose={() => setModalType(null)} onSave={async () => { await cloud.salvarMeta(editingItem); setModalType(null); }}>
+          <div className="space-y-6">
+            <h4 className="text-white font-black text-sm uppercase mb-4">{editingItem?.vendedor}</h4>
+            <div className="space-y-2"><label className="text-[9px] font-black uppercase text-gray-500">META SALARIAL / COMISSÃO (R$)</label><input type="number" className="w-full bg-[#0b0f1a] border border-gray-800 p-4 rounded-xl text-[11px] font-bold text-white" value={editingItem?.meta_salario || 0} onChange={e => setEditingItem({...editingItem, meta_salario: Number(e.target.value)})} /></div>
+            <div className="space-y-2"><label className="text-[9px] font-black uppercase text-gray-500">META PRÊMIO BRUTO (R$)</label><input type="number" className="w-full bg-[#0b0f1a] border border-gray-800 p-4 rounded-xl text-[11px] font-bold text-white" value={editingItem?.meta_premio || 0} onChange={e => setEditingItem({...editingItem, meta_premio: Number(e.target.value)})} /></div>
+            <div className="space-y-2"><label className="text-[9px] font-black uppercase text-gray-500">META QUANTIDADE (UNIDADES)</label><input type="number" className="w-full bg-[#0b0f1a] border border-gray-800 p-4 rounded-xl text-[11px] font-bold text-white" value={editingItem?.meta_qtd || 0} onChange={e => setEditingItem({...editingItem, meta_qtd: Number(e.target.value)})} /></div>
+          </div>
+        </ModalWrapper>
+      )}
+
+      {modalType === 'empresa' && (
+        <ModalWrapper title="SEGURADORA" onClose={() => setModalType(null)} onSave={async () => { await cloud.salvarEmpresa(editingItem); setModalType(null); }}>
+          <div className="space-y-2"><label className="text-[9px] font-black uppercase text-gray-500">NOME</label><input className="w-full bg-[#0b0f1a] border border-gray-800 p-5 rounded-2xl text-[11px] font-bold text-white uppercase outline-none focus:border-blue-500" value={editingItem?.nome || ''} onChange={e => setEditingItem({...editingItem, nome: e.target.value.toUpperCase()})} /></div>
+        </ModalWrapper>
+      )}
     </Layout>
   );
 };

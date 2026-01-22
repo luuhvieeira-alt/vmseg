@@ -1,15 +1,10 @@
 
-import { GoogleGenAI, Type } from "@google/genai";
+import { GoogleGenAI } from "@google/genai";
 
 export const gemini = {
   async gerarPitchVenda(lead: { cliente: string; veiculo: string; info: string }) {
-    // Inicializa dentro da função para garantir que não quebre o app no import
-    const apiKey = process.env.API_KEY;
-    if (!apiKey) {
-      throw new Error("API_KEY_MISSING");
-    }
-
-    const ai = new GoogleGenAI({ apiKey });
+    // Always use process.env.API_KEY directly when initializing the GoogleGenAI client instance
+    const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
     
     const prompt = `Analise este lead de seguro e crie um pitch de venda persuasivo e profissional para o WhatsApp. 
     Cliente: ${lead.cliente}
@@ -28,6 +23,7 @@ export const gemini = {
         }
       });
 
+      // Access the .text property directly
       return response.text;
     } catch (error) {
       console.error("Gemini API Error:", error);
@@ -36,10 +32,8 @@ export const gemini = {
   },
 
   async sugerirStatus(historico: string) {
-    const apiKey = process.env.API_KEY;
-    if (!apiKey) return null;
-
-    const ai = new GoogleGenAI({ apiKey });
+    // Always use process.env.API_KEY directly when initializing the GoogleGenAI client instance
+    const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
     
     try {
       const response = await ai.models.generateContent({
