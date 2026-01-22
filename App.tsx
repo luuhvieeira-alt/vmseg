@@ -430,8 +430,8 @@ const App: React.FC = () => {
       
       {activeSection === 'kanban-vendas' && (
         <div className="space-y-8 animate-in fade-in duration-500">
-          <div className="flex justify-between items-center"><div><h2 className="text-4xl font-black uppercase text-[#3b82f6] tracking-tighter">PRODUÇÃO</h2></div><div className="flex gap-4">{selectedVendas.length > 0 && <button onClick={async () => { if(window.confirm('Excluir selecionados?')) { for(const id of selectedVendas) await cloud.apagar('vendas', id); setSelectedVendas([]); } }} className="bg-red-600 text-white px-8 py-4 rounded-2xl font-black uppercase text-[11px]">Excluir ({selectedVendas.length})</button>}<button onClick={() => { setEditingItem({ status: 'Fazer Vistoria', suhai: false, dataCriacao: Date.now() }); setModalType('venda'); }} className="bg-blue-600 text-white px-10 py-4 rounded-2xl font-black uppercase text-[11px] shadow-lg hover:scale-105 transition-all">Lançar Venda</button></div></div>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-8"><input type="text" placeholder="PESQUISAR PRODUÇÃO..." className="w-full bg-[#111827] border border-gray-800 px-6 py-5 rounded-2xl text-[10px] font-black uppercase text-white outline-none focus:border-blue-500 transition-all" value={searchTerm} onChange={e => setSearchTerm(e.target.value)} /><select className="w-full bg-[#111827] border border-gray-800 px-6 py-5 rounded-2xl text-[10px] font-black uppercase text-gray-400 outline-none focus:border-blue-500 transition-all" value={salesmanFilter} onChange={e => setSalesmanFilter(e.target.value)}><option value="TODOS">TODOS VENDEDORES</option>{Array.from(new Set([...usuarios.map(u => u.nome), 'ELEN JACONIS'])).map(nome => <option key={nome} value={nome}>{nome}</option>)}</select></div>
+          <div className="flex justify-between items-center"><div><h2 className="text-4xl font-black uppercase text-[#3b82f6] tracking-tighter">PRODUÇÃO</h2></div><div className="flex gap-4">{selectedVendas.length > 0 && <button onClick={async () => { if(window.confirm('Excluir selecionados?')) { for(const id of selectedVendas) await cloud.apagar('vendas', id); setSelectedVendas([]); } }} className="bg-red-600 text-white px-8 py-4 rounded-2xl font-black uppercase text-[11px]">Excluir ({selectedVendas.length})</button>}<button onClick={() => { setEditingItem({ status: 'Fazer Vistoria', suhai: false, dataCriacao: Date.now(), vendedor: user?.isAdmin ? '' : user?.nome.toUpperCase() }); setModalType('venda'); }} className="bg-blue-600 text-white px-10 py-4 rounded-2xl font-black uppercase text-[11px] shadow-lg hover:scale-105 transition-all">Lançar Venda</button></div></div>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-8"><input type="text" placeholder="PESQUISAR PRODUÇÃO..." className="w-full bg-[#111827] border border-gray-800 px-6 py-5 rounded-2xl text-[10px] font-black uppercase text-white outline-none focus:border-blue-500 transition-all" value={searchTerm} onChange={e => setSearchTerm(e.target.value)} /><select className="w-full bg-[#111827] border border-gray-800 px-6 py-5 rounded-2xl text-[10px] font-black uppercase text-gray-400 outline-none focus:border-blue-500 transition-all" value={salesmanFilter} onChange={e => setSalesmanFilter(e.target.value)}><option value="TODOS">TODOS VENDEDORES</option>{Array.from(new Set([...usuarios.map(u => u.nome.toUpperCase()), 'ELEN JACONIS'])).map(nome => <option key={nome} value={nome}>{nome}</option>)}</select></div>
           <div className="flex gap-6 overflow-x-auto pb-8 scrollbar-thin h-[calc(100vh-280px)]">
             {VENDA_STATUS_MAP.map(status => (
               <div key={status} className="kanban-column flex flex-col w-[350px] bg-[#0b0f1a]/50 rounded-[2.5rem] border border-gray-800/50 p-4">
@@ -458,8 +458,8 @@ const App: React.FC = () => {
 
       {activeSection === 'kanban-indicacoes' && (
         <div className="space-y-8 animate-in fade-in duration-500">
-          <div className="flex justify-between items-center"><div><h2 className="text-4xl font-black uppercase text-[#eab308] tracking-tighter">LEADS</h2></div><button onClick={() => { setEditingItem({ status: 'NOVA INDICAÇÃO', suhai: false, dataCriacao: Date.now() }); setModalType('indicacao'); }} className="bg-yellow-500 text-black px-10 py-4 rounded-2xl font-black uppercase text-[11px] shadow-lg hover:scale-105 transition-all">Novo Lead</button></div>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-8"><input type="text" placeholder="BUSCAR LEADS..." className="w-full bg-[#111827] border border-gray-800 px-6 py-5 rounded-2xl text-[10px] font-black uppercase text-white outline-none focus:border-yellow-500 transition-all" value={searchTerm} onChange={e => setSearchTerm(e.target.value)} /><select className="w-full bg-[#111827] border border-gray-800 px-6 py-5 rounded-2xl text-[10px] font-black uppercase text-gray-400 outline-none focus:border-blue-500 transition-all" value={salesmanFilter} onChange={e => setSalesmanFilter(e.target.value)}><option value="TODOS">TODOS VENDEDORES</option>{Array.from(new Set([...usuarios.map(u => u.nome), 'ELEN JACONIS'])).map(nome => <option key={nome} value={nome}>{nome}</option>)}</select></div>
+          <div className="flex justify-between items-center"><div><h2 className="text-4xl font-black uppercase text-[#eab308] tracking-tighter">LEADS</h2></div><button onClick={() => { setActiveSection('cadastrar-indicacao'); }} className="bg-yellow-500 text-black px-10 py-4 rounded-2xl font-black uppercase text-[11px] shadow-lg hover:scale-105 transition-all">Novo Lead</button></div>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-8"><input type="text" placeholder="BUSCAR LEADS..." className="w-full bg-[#111827] border border-gray-800 px-6 py-5 rounded-2xl text-[10px] font-black uppercase text-white outline-none focus:border-yellow-500 transition-all" value={searchTerm} onChange={e => setSearchTerm(e.target.value)} /><select className="w-full bg-[#111827] border border-gray-800 px-6 py-5 rounded-2xl text-[10px] font-black uppercase text-gray-400 outline-none focus:border-blue-500 transition-all" value={salesmanFilter} onChange={e => setSalesmanFilter(e.target.value)}><option value="TODOS">TODOS VENDEDORES</option>{Array.from(new Set([...usuarios.map(u => u.nome.toUpperCase()), 'ELEN JACONIS'])).map(nome => <option key={nome} value={nome}>{nome}</option>)}</select></div>
           <div className="flex gap-6 overflow-x-auto pb-8 scrollbar-thin h-[calc(100vh-280px)]">
             {INDICACAO_STATUS_MAP.map(status => (
               <div key={status} className="kanban-column flex flex-col w-[350px] bg-[#0b0f1a]/50 rounded-[2.5rem] border border-gray-800/50 p-4">
@@ -489,7 +489,7 @@ const App: React.FC = () => {
           <div className="flex justify-between items-center"><h2 className="text-4xl font-black uppercase text-blue-400 tracking-tighter">METAS DOS VENDEDORES</h2></div>
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
             {usuarios.filter(u => u.setor === 'VENDEDOR' || u.nome.toUpperCase() === 'ELEN JACONIS').map(u => {
-              const meta = metas.find(m => m.vendedor.toUpperCase() === u.nome.toUpperCase()) || { vendedor: u.nome, meta_qtd: 0, meta_premio: 0, meta_salario: 0 };
+              const meta = metas.find(m => m.vendedor.toUpperCase() === u.nome.toUpperCase()) || { vendedor: u.nome.toUpperCase(), meta_qtd: 0, meta_premio: 0, meta_salario: 0 };
               return (
                 <div key={u.id || u.nome} className="bg-[#111827] p-10 rounded-[2.5rem] border border-gray-800 shadow-xl relative group hover:border-blue-500/30 transition-all">
                   <button onClick={() => { setEditingItem(meta); setModalType('meta'); }} className="absolute top-8 right-8 text-gray-600 hover:text-white transition-all opacity-0 group-hover:opacity-100"><i className="fas fa-edit text-xs"></i></button>
@@ -611,14 +611,21 @@ const App: React.FC = () => {
               <div className="space-y-2">
                 <label className="text-[10px] font-black uppercase text-gray-500">ATRIBUIR AO VENDEDOR</label>
                 <select 
-                  className="w-full bg-[#0b0f1a] border border-gray-800 p-6 rounded-2xl text-white uppercase outline-none focus:border-yellow-500 transition-all appearance-none" 
-                  value={distribuirForm.vendedor || ''} 
+                  disabled={!user?.isAdmin}
+                  className={`w-full bg-[#0b0f1a] border border-gray-800 p-6 rounded-2xl text-white uppercase outline-none focus:border-yellow-500 transition-all appearance-none ${!user?.isAdmin ? 'opacity-50' : ''}`} 
+                  value={distribuirForm.vendedor || (user?.isAdmin ? '' : user?.nome.toUpperCase())} 
                   onChange={e => setDistribuirForm({...distribuirForm, vendedor: e.target.value})}
                 >
-                  <option value="">SELECIONE UM VENDEDOR</option>
-                  {Array.from(new Set([...usuarios.map(u => u.nome), 'ELEN JACONIS'])).map(nome => (
-                    <option key={nome} value={nome}>{nome}</option>
-                  ))}
+                  {user?.isAdmin ? (
+                    <>
+                      <option value="">SELECIONE UM VENDEDOR</option>
+                      {Array.from(new Set([...usuarios.map(u => u.nome.toUpperCase()), 'ELEN JACONIS'])).map(nome => (
+                        <option key={nome} value={nome}>{nome}</option>
+                      ))}
+                    </>
+                  ) : (
+                    <option value={user?.nome.toUpperCase()}>{user?.nome.toUpperCase()}</option>
+                  )}
                 </select>
               </div>
               <div className="flex items-center gap-3 p-4 bg-green-500/5 rounded-2xl border border-green-500/10">
@@ -643,10 +650,11 @@ const App: React.FC = () => {
             </div>
             <button 
               onClick={async () => { 
-                if (!distribuirForm.cliente || !distribuirForm.vendedor) return alert("Erro: Cliente e Vendedor são obrigatórios."); 
-                await cloud.salvarIndicacao(distribuirForm as Indicacao); 
+                const finalForm = { ...distribuirForm, vendedor: user?.isAdmin ? distribuirForm.vendedor : user?.nome.toUpperCase() };
+                if (!finalForm.cliente || !finalForm.vendedor) return alert("Erro: Cliente e Vendedor são obrigatórios."); 
+                await cloud.salvarIndicacao(finalForm as Indicacao); 
                 alert("Sucesso: Lead distribuído para a equipe!"); 
-                setDistribuirForm({ status: 'NOVA INDICAÇÃO', suhai: false, info: '', cliente: '', tel: '', veiculo: '', vendedor: '' }); 
+                setDistribuirForm({ status: 'NOVA INDICAÇÃO', suhai: false, info: '', cliente: '', tel: '', veiculo: '', vendedor: user?.isAdmin ? '' : user?.nome.toUpperCase() }); 
               }} 
               className="w-full bg-yellow-500 text-black p-6 rounded-3xl font-black uppercase text-xs active:scale-95 transition-all shadow-xl shadow-yellow-500/10"
             >
@@ -662,12 +670,61 @@ const App: React.FC = () => {
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             <div className="space-y-2 col-span-2"><label className="text-[9px] font-black uppercase text-gray-500">CLIENTE</label><input className="w-full bg-[#0b0f1a] border border-gray-800 p-4 rounded-xl text-white outline-none" value={editingItem?.cliente || ''} onChange={e => setEditingItem({...editingItem, cliente: e.target.value.toUpperCase()})} /></div>
             <div className="space-y-2 col-span-2"><label className="text-[9px] font-black uppercase text-gray-500">TELEFONE (WHATSAPP)</label><input className="w-full bg-[#0b0f1a] border border-gray-800 p-4 rounded-xl text-white outline-none" value={editingItem?.tel || ''} onChange={e => setEditingItem({...editingItem, tel: e.target.value})} /></div>
-            <div className="space-y-2"><label className="text-[9px] font-black uppercase text-gray-500">VENDEDOR</label><select className="w-full bg-[#0b0f1a] border border-gray-800 p-4 rounded-xl text-white font-bold uppercase" value={editingItem?.vendedor || ''} onChange={e => setEditingItem({...editingItem, vendedor: e.target.value})}>{Array.from(new Set([...usuarios.map(u => u.nome), 'ELEN JACONIS'])).map(nome => <option key={nome} value={nome}>{nome}</option>)}</select></div>
+            <div className="space-y-2"><label className="text-[9px] font-black uppercase text-gray-500">VENDEDOR</label>
+              <select 
+                disabled={!user?.isAdmin}
+                className={`w-full bg-[#0b0f1a] border border-gray-800 p-4 rounded-xl text-white font-bold uppercase ${!user?.isAdmin ? 'opacity-50' : ''}`}
+                value={editingItem?.vendedor || (user?.isAdmin ? '' : user?.nome.toUpperCase())} 
+                onChange={e => setEditingItem({...editingItem, vendedor: e.target.value})}
+              >
+                {user?.isAdmin ? (
+                  <>
+                    <option value="">SELECIONE</option>
+                    {Array.from(new Set([...usuarios.map(u => u.nome.toUpperCase()), 'ELEN JACONIS'])).map(nome => (
+                      <option key={nome} value={nome}>{nome}</option>
+                    ))}
+                  </>
+                ) : (
+                  <option value={user?.nome.toUpperCase()}>{user?.nome.toUpperCase()}</option>
+                )}
+              </select>
+            </div>
             <div className="space-y-2"><label className="text-[9px] font-black uppercase text-gray-500">VALOR PRÊMIO</label><input type="number" className="w-full bg-[#0b0f1a] border border-gray-800 p-4 rounded-xl text-white" value={editingItem?.valor || 0} onChange={e => setEditingItem({...editingItem, valor: Number(e.target.value)})} /></div>
             <div className="space-y-2"><label className="text-[9px] font-black uppercase text-gray-500">C. CHEIA</label><input type="number" className="w-full bg-[#0b0f1a] border border-gray-800 p-4 rounded-xl text-white font-bold" value={editingItem?.comissao_cheia || 0} onChange={e => setEditingItem({...editingItem, comissao_cheia: Number(e.target.value)})} /></div>
             <div className="space-y-2"><label className="text-[9px] font-black uppercase text-gray-500">PARTE VENDEDOR</label><input type="number" className="w-full bg-[#0b0f1a] border border-gray-800 p-4 rounded-xl text-white font-bold" value={editingItem?.comissao_vendedor || 0} onChange={e => setEditingItem({...editingItem, comissao_vendedor: Number(e.target.value)})} /></div>
             <div className="space-y-2"><label className="text-[9px] font-black uppercase text-gray-500">SEGURADORA</label><select className="w-full bg-[#0b0f1a] border border-gray-800 p-4 rounded-xl text-white" value={editingItem?.empresa || ''} onChange={e => setEditingItem({...editingItem, empresa: e.target.value})}>{empresas.map(emp => <option key={emp.id} value={emp.nome}>{emp.nome}</option>)}</select></div>
             <div className="space-y-2"><label className="text-[9px] font-black uppercase text-gray-500">STATUS</label><select className="w-full bg-[#0b0f1a] border border-gray-800 p-4 rounded-xl text-white font-bold uppercase" value={editingItem?.status || 'Fazer Vistoria'} onChange={e => setEditingItem({...editingItem, status: e.target.value})}>{VENDA_STATUS_MAP.map(s => <option key={s} value={s}>{s}</option>)}</select></div>
+          </div>
+        </ModalWrapper>
+      )}
+
+      {modalType === 'indicacao' && (
+        <ModalWrapper title="GERENCIAR LEAD" onClose={() => setModalType(null)} onSave={async () => { await cloud.salvarIndicacao(editingItem); setModalType(null); }}>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <div className="space-y-2 col-span-2"><label className="text-[9px] font-black uppercase text-gray-500">CLIENTE</label><input className="w-full bg-[#0b0f1a] border border-gray-800 p-4 rounded-xl text-white outline-none" value={editingItem?.cliente || ''} onChange={e => setEditingItem({...editingItem, cliente: e.target.value.toUpperCase()})} /></div>
+            <div className="space-y-2"><label className="text-[9px] font-black uppercase text-gray-500">WHATSAPP</label><input className="w-full bg-[#0b0f1a] border border-gray-800 p-4 rounded-xl text-white outline-none" value={editingItem?.tel || ''} onChange={e => setEditingItem({...editingItem, tel: e.target.value})} /></div>
+            <div className="space-y-2"><label className="text-[9px] font-black uppercase text-gray-500">VEÍCULO</label><input className="w-full bg-[#0b0f1a] border border-gray-800 p-4 rounded-xl text-white outline-none" value={editingItem?.veiculo || ''} onChange={e => setEditingItem({...editingItem, veiculo: e.target.value.toUpperCase()})} /></div>
+            <div className="space-y-2 col-span-2"><label className="text-[9px] font-black uppercase text-gray-500">VENDEDOR</label>
+              <select 
+                disabled={!user?.isAdmin}
+                className={`w-full bg-[#0b0f1a] border border-gray-800 p-4 rounded-xl text-white font-bold uppercase ${!user?.isAdmin ? 'opacity-50' : ''}`}
+                value={editingItem?.vendedor || (user?.isAdmin ? '' : user?.nome.toUpperCase())} 
+                onChange={e => setEditingItem({...editingItem, vendedor: e.target.value})}
+              >
+                {user?.isAdmin ? (
+                  <>
+                    <option value="">SELECIONE</option>
+                    {Array.from(new Set([...usuarios.map(u => u.nome.toUpperCase()), 'ELEN JACONIS'])).map(nome => (
+                      <option key={nome} value={nome}>{nome}</option>
+                    ))}
+                  </>
+                ) : (
+                  <option value={user?.nome.toUpperCase()}>{user?.nome.toUpperCase()}</option>
+                )}
+              </select>
+            </div>
+            <div className="space-y-2 col-span-2"><label className="text-[9px] font-black uppercase text-gray-500">OBSERVAÇÕES</label><textarea className="w-full bg-[#0b0f1a] border border-gray-800 p-4 rounded-xl text-white outline-none h-24" value={editingItem?.info || ''} onChange={e => setEditingItem({...editingItem, info: e.target.value})} /></div>
+            <div className="space-y-2"><label className="text-[9px] font-black uppercase text-gray-500">STATUS</label><select className="w-full bg-[#0b0f1a] border border-gray-800 p-4 rounded-xl text-white font-bold uppercase" value={editingItem?.status || 'NOVA INDICAÇÃO'} onChange={e => setEditingItem({...editingItem, status: e.target.value})}>{INDICACAO_STATUS_MAP.map(s => <option key={s} value={s}>{s}</option>)}</select></div>
           </div>
         </ModalWrapper>
       )}
