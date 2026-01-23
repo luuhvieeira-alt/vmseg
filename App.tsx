@@ -95,7 +95,7 @@ const DashboardView: React.FC<{
 
   return (
     <div className="space-y-10 animate-in fade-in duration-500 max-w-[1600px] mx-auto">
-      <h2 className="text-4xl font-black uppercase text-white tracking-tighter">COCKPIT GERAL</h2>
+      <h2 className="text-4xl font-black uppercase text-white tracking-tighter">Você só vence amanhã se não desistir hoje!</h2>
       
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
         <div className="bg-[#111827] p-8 rounded-[2rem] border border-gray-800 border-l-4 border-l-blue-500 shadow-xl">
