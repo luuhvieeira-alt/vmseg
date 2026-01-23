@@ -354,7 +354,7 @@ const App: React.FC = () => {
   const handleLogin = () => {
     const uI = loginForm.username.trim().toLowerCase();
     const pI = loginForm.password.trim();
-    if (uI === 'admin' && pI === 'admin123') {
+    if (uI === 'admin' && pI === 'Realmadridfc123@') {
       setUser({ nome: 'ADMIN MASTER', setor: 'ADMIN', isAdmin: true, login: 'admin', comissao: 100 });
       setIsAuthenticated(true);
     } else {
