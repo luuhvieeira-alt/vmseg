@@ -282,6 +282,19 @@ const PerformanceView: React.FC<{
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-10">
         {stats.vendedores.map(v => (
           <div key={v.nome} className="bg-[#111827] rounded-[3.5rem] p-10 border border-gray-800 shadow-2xl relative group overflow-hidden border-t-8 border-t-purple-600/50">
+             <button 
+                onClick={() => {
+                  const userRecord = usuarios.find(u => u.nome.toUpperCase() === v.nome.toUpperCase());
+                  if (userRecord && window.confirm(`Deseja realmente excluir o vendedor ${v.nome}?`)) {
+                    cloud.apagar('usuarios', userRecord.id!);
+                  } else if (!userRecord) {
+                    alert("Aviso: Este registro não é um usuário editável (provavelmente histórico de vendas).");
+                  }
+                }} 
+                className="absolute top-8 left-8 text-red-500/30 hover:text-red-500 transition-all z-10"
+             >
+                <i className="fas fa-trash-alt text-xs"></i>
+             </button>
              <div className="text-center mb-10">
                <h3 className="text-xl font-black uppercase text-white tracking-tighter mb-8">{v.nome}</h3>
                <div className="bg-[#0b0f1a] p-10 rounded-[2.5rem] border border-gray-800/50 mb-8"><p className="text-[8px] font-black text-gray-500 uppercase mb-2">PRODUÇÃO REAL (MÊS)</p><h4 className="text-6xl font-black text-purple-500 drop-shadow-[0_0_10px_rgba(168,85,247,0.3)]">{v.total}</h4></div>
