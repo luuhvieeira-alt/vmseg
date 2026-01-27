@@ -505,7 +505,32 @@ const App: React.FC = () => {
                 <div className="flex-1 space-y-6 overflow-y-auto pr-2 scrollbar-thin">
                   {filteredIndicacoes.filter(i => i.status === status).map(i => (
                     <div key={i.id} className="bg-[#111827] rounded-[2rem] border border-yellow-900/20 p-8 shadow-sm hover:border-yellow-500/50 transition-all group relative overflow-hidden">
-                      <div className="absolute top-8 right-8 flex gap-3"><button onClick={() => { if(window.confirm('Excluir lead?')) cloud.apagar('indicacoes', i.id!)}} className="text-red-500/30 hover:text-red-500 transition"><i className="fas fa-trash-alt text-[10px]"></i></button><button onClick={() => { setEditingItem(i); setModalType('indicacao'); }} className="text-gray-600 hover:text-white transition"><i className="fas fa-pencil-alt text-[10px]"></i></button></div>
+                      <div className="absolute top-8 right-8 flex gap-3">
+                        <button 
+                          onClick={() => { 
+                            setEditingItem({ 
+                              cliente: i.cliente, 
+                              tel: i.tel, 
+                              vendedor: i.vendedor || (user?.isAdmin ? '' : user?.nome.toUpperCase()),
+                              status: 'Fazer Vistoria',
+                              suhai: i.suhai || false,
+                              dataCriacao: Date.now(),
+                              leadIdToDelete: i.id,
+                              valor: 0,
+                              comissao_cheia: 0,
+                              comissao_vendedor: 0,
+                              empresa: empresas[0]?.nome || 'SUHAI SEGURADORA'
+                            }); 
+                            setModalType('venda'); 
+                          }} 
+                          title="Confirmar Venda"
+                          className="text-green-500/40 hover:text-green-500 transition"
+                        >
+                          <i className="fas fa-check text-[10px]"></i>
+                        </button>
+                        <button onClick={() => { if(window.confirm('Excluir lead?')) cloud.apagar('indicacoes', i.id!)}} className="text-red-500/30 hover:text-red-500 transition"><i className="fas fa-trash-alt text-[10px]"></i></button>
+                        <button onClick={() => { setEditingItem(i); setModalType('indicacao'); }} className="text-gray-600 hover:text-white transition"><i className="fas fa-pencil-alt text-[10px]"></i></button>
+                      </div>
                       <div className="pl-6 space-y-5">
                         <div><p className="text-sm font-black text-white uppercase leading-tight mb-2">{i.cliente}</p><p className="text-[10px] font-bold text-yellow-500">{i.tel}</p><p className="text-[10px] font-black text-gray-500 uppercase mt-2 tracking-widest">{i.veiculo || 'SEM VEÍCULO'}</p></div>
                         <div className="flex flex-col pt-5 mt-2 border-t border-gray-800/50"><div className="flex justify-between items-center mb-1"><button onClick={() => moveIndicacao(i, 'left')} className="text-gray-600 hover:text-white transition"><i className="fas fa-chevron-left text-[9px]"></i></button><span className="text-[9px] font-black text-gray-500 uppercase tracking-tighter">{i.vendedor || 'SEM VENDEDOR'}</span><button onClick={() => moveIndicacao(i, 'right')} className="text-gray-600 hover:text-white transition"><i className="fas fa-chevron-right text-[9px]"></i></button></div>{i.suhai && <div className="text-center s-suhai-pulse text-[8px] uppercase tracking-widest mt-1 opacity-60">Suhai</div>}</div>
@@ -704,7 +729,18 @@ const App: React.FC = () => {
 
       {/* MODAIS */}
       {modalType === 'venda' && (
-        <ModalWrapper title="GERENCIAR PRODUÇÃO" onClose={() => setModalType(null)} onSave={async () => { await cloud.salvarVenda(editingItem); setModalType(null); }}>
+        <ModalWrapper 
+          title="GERENCIAR PRODUÇÃO" 
+          onClose={() => setModalType(null)} 
+          onSave={async () => { 
+            const { leadIdToDelete, ...data } = editingItem;
+            await cloud.salvarVenda(data); 
+            if (leadIdToDelete) {
+              await cloud.apagar('indicacoes', leadIdToDelete);
+            }
+            setModalType(null); 
+          }}
+        >
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             <div className="space-y-2 col-span-2"><label className="text-[9px] font-black uppercase text-gray-500">CLIENTE</label><input className="w-full bg-[#0b0f1a] border border-gray-800 p-4 rounded-xl text-white outline-none" value={editingItem?.cliente || ''} onChange={e => setEditingItem({...editingItem, cliente: e.target.value.toUpperCase()})} /></div>
             <div className="space-y-2 col-span-2"><label className="text-[9px] font-black uppercase text-gray-500">TELEFONE (WHATSAPP)</label><input className="w-full bg-[#0b0f1a] border border-gray-800 p-4 rounded-xl text-white outline-none" value={editingItem?.tel || ''} onChange={e => setEditingItem({...editingItem, tel: e.target.value})} /></div>
