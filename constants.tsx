@@ -12,7 +12,8 @@ export const INDICACAO_STATUS_MAP: IndicacaoStatus[] = [
   'NOVA INDICAÇÃO',
   'WHATSAPP',
   'COTAÇÃO REALIZADA',
-  'COBRAR ATENÇÃO'
+  'COBRAR ATENÇÃO',
+  'NUMERO INVALIDO'
 ];
 
 export const FORMAT_BRL = (v: number | string) => 

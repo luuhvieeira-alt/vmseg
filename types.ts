@@ -39,7 +39,7 @@ export interface Venda {
   dataCriacao: number;
 }
 
-export type IndicacaoStatus = 'NOVA INDICAÇÃO' | 'WHATSAPP' | 'COTAÇÃO REALIZADA' | 'COBRAR ATENÇÃO';
+export type IndicacaoStatus = 'NOVA INDICAÇÃO' | 'WHATSAPP' | 'COTAÇÃO REALIZADA' | 'COBRAR ATENÇÃO' | 'NUMERO INVALIDO';
 
 export interface Indicacao {
   id?: string;
