@@ -327,6 +327,7 @@ const App: React.FC = () => {
   const [loginForm, setLoginForm] = useState({ username: '', password: '' });
   const [searchTerm, setSearchTerm] = useState('');
   const [salesmanFilter, setSalesmanFilter] = useState('TODOS');
+  const [dateFilter, setDateFilter] = useState('');
 
   const [vendas, setVendas] = useState<Venda[]>([]);
   const [usuarios, setUsuarios] = useState<User[]>([]);
@@ -392,8 +393,17 @@ const App: React.FC = () => {
       const low = searchTerm.toLowerCase();
       list = list.filter(i => (i.cliente || '').toLowerCase().includes(low) || (i.vendedor || '').toLowerCase().includes(low));
     }
+    if (dateFilter) {
+      list = list.filter(i => {
+        const d = new Date(i.dataCriacao);
+        const y = d.getFullYear();
+        const m = String(d.getMonth() + 1).padStart(2, '0');
+        const day = String(d.getDate()).padStart(2, '0');
+        return `${y}-${m}-${day}` === dateFilter;
+      });
+    }
     return list;
-  }, [indicacoes, user, searchTerm, salesmanFilter]);
+  }, [indicacoes, user, searchTerm, salesmanFilter, dateFilter]);
 
   const salesSuhai = vendas.filter(v => v.status === 'Pagamento Efetuado' && v.suhai);
   const totalSuhaiComm = salesSuhai.reduce((acc, v) => acc + (user?.isAdmin ? Number(v.comissao_cheia || 0) : Number(v.comissao_vendedor || 0)), 0);
@@ -471,7 +481,22 @@ const App: React.FC = () => {
 
       {activeSection === 'kanban-indicacoes' && (
         <div className="space-y-8 animate-in fade-in duration-500">
-          <div className="flex justify-between items-center"><div><h2 className="text-4xl font-black uppercase text-[#eab308] tracking-tighter">LEADS</h2></div><button onClick={() => { setActiveSection('cadastrar-indicacao'); }} className="bg-yellow-500 text-black px-10 py-4 rounded-2xl font-black uppercase text-[11px] shadow-lg hover:scale-105 transition-all">Novo Lead</button></div>
+          <div className="flex justify-between items-center">
+            <div><h2 className="text-4xl font-black uppercase text-[#eab308] tracking-tighter">LEADS</h2></div>
+            <div className="flex flex-col items-end gap-2">
+              <button onClick={() => { setActiveSection('cadastrar-indicacao'); }} className="bg-yellow-500 text-black px-10 py-4 rounded-2xl font-black uppercase text-[11px] shadow-lg hover:scale-105 transition-all">Novo Lead</button>
+              <div className="flex items-center gap-2">
+                <span className="text-[8px] font-black text-gray-600 uppercase">Filtrar Data:</span>
+                <input 
+                  type="date" 
+                  className="bg-[#111827] border border-gray-800 rounded-lg p-2 text-[10px] font-black uppercase text-gray-400 outline-none focus:border-yellow-500 transition-all" 
+                  value={dateFilter} 
+                  onChange={e => setDateFilter(e.target.value)}
+                />
+                {dateFilter && <button onClick={() => setDateFilter('')} className="text-red-500 text-[10px] hover:text-red-400 transition-all"><i className="fas fa-times-circle"></i></button>}
+              </div>
+            </div>
+          </div>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-8"><input type="text" placeholder="BUSCAR LEADS..." className="w-full bg-[#111827] border border-gray-800 px-6 py-5 rounded-2xl text-[10px] font-black uppercase text-white outline-none focus:border-yellow-500 transition-all" value={searchTerm} onChange={e => setSearchTerm(e.target.value)} /><select className="w-full bg-[#111827] border border-gray-800 px-6 py-5 rounded-2xl text-[10px] font-black uppercase text-gray-400 outline-none focus:border-blue-500 transition-all" value={salesmanFilter} onChange={e => setSalesmanFilter(e.target.value)}><option value="TODOS">TODOS VENDEDORES</option>{Array.from(new Set([...usuarios.map(u => u.nome.toUpperCase()), 'ELEN JACONIS'])).map(nome => <option key={nome} value={nome}>{nome}</option>)}</select></div>
           <div className="flex gap-6 overflow-x-auto pb-8 scrollbar-thin h-[calc(100vh-280px)]">
             {INDICACAO_STATUS_MAP.map(status => (
