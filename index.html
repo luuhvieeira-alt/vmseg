@@ -43,38 +43,78 @@
 
         /* Estilos para PDF / Impressão */
         @media print {
-            aside, header, button, .no-print, input, select {
+            /* Ocultar elementos desnecessários */
+            aside, header, button, .no-print, input, select, .fas, .fa-robot {
                 display: none !important;
             }
-            body {
+
+            /* Resetar containers para permitir rolagem e expansão total no PDF */
+            html, body, #root, div[class*="flex-col"], main {
+                height: auto !important;
+                overflow: visible !important;
+                display: block !important;
                 background-color: white !important;
                 color: black !important;
-            }
-            main {
-                padding: 0 !important;
                 margin: 0 !important;
+                padding: 0 !important;
             }
-            .bg-[#111827], .bg-[#0b0f1a] {
-                background-color: white !important;
+
+            /* Forçar containers específicos do Layout a não limitarem altura */
+            .h-screen, .overflow-hidden, .overflow-y-auto {
+                height: auto !important;
+                overflow: visible !important;
+                max-height: none !important;
+                position: relative !important;
+            }
+
+            /* Estilo da Tabela para Impressão */
+            table {
+                width: 100% !important;
+                border-collapse: collapse !important;
+                table-layout: auto !important;
+                page-break-inside: auto;
+            }
+            tr {
+                page-break-inside: avoid;
+                page-break-after: auto;
+            }
+            thead {
+                display: table-header-group;
+            }
+            th, td {
                 border: 1px solid #e5e7eb !important;
+                padding: 12px 8px !important;
+                color: black !important;
+                background: white !important;
+                word-wrap: break-word !important;
             }
+
+            /* Ajuste de cores para economia de tinta e clareza */
             .text-white, .text-gray-400, .text-gray-500, .text-blue-400 {
                 color: black !important;
             }
             .text-green-500 {
-                color: #059669 !important;
+                color: #059669 !important; /* Verde escuro para leitura */
             }
-            table {
-                width: 100% !important;
-                border-collapse: collapse !important;
+            .bg-[#111827], .bg-[#0b0f1a], .bg-[#0b0f1a]/50 {
+                background-color: white !important;
+                border: 1px solid #e5e7eb !important;
             }
-            th, td {
-                border: 1px solid #ddd !important;
-                padding: 8px !important;
-                color: black !important;
+
+            /* Remover arredondamentos exagerados que podem bugar em PDF */
+            .rounded-[2.5rem], .rounded-[3rem], .rounded-2xl, .rounded-[2rem] {
+                border-radius: 4px !important;
             }
-            .rounded-[2.5rem], .rounded-[3rem], .rounded-2xl {
-                border-radius: 0 !important;
+            
+            /* Título do Relatório */
+            #financeiro-table::before {
+                content: "RELATÓRIO DE PRODUÇÃO - VM SEGUROS";
+                display: block;
+                font-weight: 900;
+                font-size: 18px;
+                text-align: center;
+                margin-bottom: 20px;
+                text-transform: uppercase;
             }
         }
     </style>
