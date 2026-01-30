@@ -41,80 +41,95 @@
             flex-shrink: 0;
         }
 
-        /* Estilos para PDF / Impressão */
+        /* Estilos para PDF / Impressão - CORREÇÃO PARA MÚLTIPLAS PÁGINAS */
         @media print {
-            /* Ocultar elementos desnecessários */
-            aside, header, button, .no-print, input, select, .fas, .fa-robot {
+            /* 1. Ocultar tudo que não é essencial para o relatório */
+            aside, header, button, .no-print, input, select, .fas, .fa-robot, .scrollbar-thin::-webkit-scrollbar {
                 display: none !important;
             }
 
-            /* Resetar containers para permitir rolagem e expansão total no PDF */
-            html, body, #root, div[class*="flex-col"], main {
+            /* 2. Forçar todos os containers a expandirem verticalmente e ocuparem o fluxo normal */
+            html, body, #root, div[class*="flex-col"], main, div[class*="flex-1"] {
                 height: auto !important;
+                min-height: auto !important;
                 overflow: visible !important;
                 display: block !important;
+                float: none !important;
+                position: static !important;
                 background-color: white !important;
                 color: black !important;
                 margin: 0 !important;
                 padding: 0 !important;
             }
 
-            /* Forçar containers específicos do Layout a não limitarem altura */
-            .h-screen, .overflow-hidden, .overflow-y-auto {
+            /* 3. Remover restrições do Tailwind/Layout que limitam o documento à altura da janela */
+            .h-screen, .max-h-screen, .overflow-hidden, .overflow-y-auto {
                 height: auto !important;
-                overflow: visible !important;
                 max-height: none !important;
-                position: relative !important;
+                overflow: visible !important;
             }
 
-            /* Estilo da Tabela para Impressão */
+            /* 4. Estilizar especificamente o container da tabela do financeiro */
+            #financeiro-table {
+                overflow: visible !important;
+                height: auto !important;
+                border: none !important;
+                box-shadow: none !important;
+                background: white !important;
+                max-width: 100% !important;
+            }
+
+            /* 5. Configuração da Tabela para Impressão limpa entre páginas */
             table {
                 width: 100% !important;
                 border-collapse: collapse !important;
                 table-layout: auto !important;
-                page-break-inside: auto;
+                page-break-inside: auto !important;
             }
             tr {
-                page-break-inside: avoid;
-                page-break-after: auto;
+                page-break-inside: avoid !important;
+                page-break-after: auto !important;
             }
             thead {
-                display: table-header-group;
+                display: table-header-group !important;
             }
             th, td {
-                border: 1px solid #e5e7eb !important;
-                padding: 12px 8px !important;
+                border: 1px solid #ddd !important;
+                padding: 10px 8px !important;
                 color: black !important;
-                background: white !important;
-                word-wrap: break-word !important;
+                font-size: 10pt !important;
+                background-color: transparent !important;
             }
 
-            /* Ajuste de cores para economia de tinta e clareza */
+            /* 6. Ajustes de Cores para clareza no papel */
             .text-white, .text-gray-400, .text-gray-500, .text-blue-400 {
                 color: black !important;
             }
             .text-green-500 {
-                color: #059669 !important; /* Verde escuro para leitura */
+                color: #059669 !important;
             }
-            .bg-[#111827], .bg-[#0b0f1a], .bg-[#0b0f1a]/50 {
-                background-color: white !important;
-                border: 1px solid #e5e7eb !important;
-            }
-
-            /* Remover arredondamentos exagerados que podem bugar em PDF */
-            .rounded-[2.5rem], .rounded-[3rem], .rounded-2xl, .rounded-[2rem] {
-                border-radius: 4px !important;
+            .bg-[#111827], .bg-[#0b0f1a], .bg-[#0b0f1a]/50, .bg-[#0b0f1a]/30 {
+                background-color: transparent !important;
+                border: none !important;
             }
             
-            /* Título do Relatório */
+            /* Título do Relatório no PDF */
             #financeiro-table::before {
-                content: "RELATÓRIO DE PRODUÇÃO - VM SEGUROS";
+                content: "RELATÓRIO DE PRODUÇÃO COMPLETO - VM SEGUROS";
                 display: block;
                 font-weight: 900;
-                font-size: 18px;
+                font-size: 16pt;
                 text-align: center;
-                margin-bottom: 20px;
+                margin: 20px 0;
                 text-transform: uppercase;
+                border-bottom: 2px solid black;
+                padding-bottom: 10px;
+            }
+            
+            /* Margens e tamanho da página */
+            @page {
+                size: A4 portrait;
+                margin: 15mm;
             }
         }
     </style>
