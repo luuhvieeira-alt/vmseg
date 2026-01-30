@@ -40,6 +40,43 @@
             min-width: 280px;
             flex-shrink: 0;
         }
+
+        /* Estilos para PDF / Impressão */
+        @media print {
+            aside, header, button, .no-print, input, select {
+                display: none !important;
+            }
+            body {
+                background-color: white !important;
+                color: black !important;
+            }
+            main {
+                padding: 0 !important;
+                margin: 0 !important;
+            }
+            .bg-[#111827], .bg-[#0b0f1a] {
+                background-color: white !important;
+                border: 1px solid #e5e7eb !important;
+            }
+            .text-white, .text-gray-400, .text-gray-500, .text-blue-400 {
+                color: black !important;
+            }
+            .text-green-500 {
+                color: #059669 !important;
+            }
+            table {
+                width: 100% !important;
+                border-collapse: collapse !important;
+            }
+            th, td {
+                border: 1px solid #ddd !important;
+                padding: 8px !important;
+                color: black !important;
+            }
+            .rounded-[2.5rem], .rounded-[3rem], .rounded-2xl {
+                border-radius: 0 !important;
+            }
+        }
     </style>
     <script type="importmap">
 {
