@@ -1,6 +1,6 @@
 
 import React, { useState, useEffect, useMemo } from 'react';
-import { AuthUser, User, Venda, Indicacao, Meta, Empresa } from './types';
+import { AuthUser, User, Venda, Indicacao, Meta, Empresa, Cancelamento } from './types';
 import { cloud } from './services/firebase';
 import { FORMAT_BRL, INDICACAO_STATUS_MAP, VENDA_STATUS_MAP } from './constants';
 import Layout from './components/Layout';
@@ -326,6 +326,75 @@ const PerformanceView: React.FC<{
   );
 };
 
+const CancelamentosView: React.FC<{ 
+  cancelamentos: Cancelamento[], 
+  user: AuthUser | null, 
+  onAdd: () => void,
+  onDelete: (id: string) => void
+}> = ({ cancelamentos, user, onAdd, onDelete }) => {
+  const stats = useMemo(() => {
+    const uNome = (user?.nome || '').trim().toUpperCase();
+    const filtered = user?.isAdmin 
+      ? cancelamentos 
+      : cancelamentos.filter(c => (c.vendedor || '').trim().toUpperCase() === uNome);
+    
+    const total = filtered.reduce((acc, c) => acc + Number(c.valor_comissao || 0), 0);
+    return { filtered, total };
+  }, [cancelamentos, user]);
+
+  return (
+    <div className="space-y-12 animate-in fade-in duration-500 max-w-[1600px] mx-auto">
+      <div className="flex justify-between items-center">
+        <h2 className="text-4xl font-black uppercase text-red-500 tracking-tighter">CANCELAMENTOS</h2>
+        {user?.isAdmin && (
+          <button 
+            onClick={onAdd}
+            className="bg-red-600 hover:bg-red-500 text-white px-8 py-4 rounded-2xl font-black uppercase text-[10px] transition-all no-print flex items-center gap-2 shadow-lg shadow-red-900/20"
+          >
+            <i className="fas fa-plus-circle"></i> Novo Cancelamento
+          </button>
+        )}
+      </div>
+      <div className="bg-[#111827] p-10 rounded-[2.5rem] border border-gray-800 border-l-4 border-l-red-500 shadow-2xl flex flex-col items-center justify-center space-y-3">
+        <p className="text-[10px] font-black uppercase text-gray-500 tracking-widest">TOTAL COMISSÃO CANCELADA</p>
+        <h1 className="text-6xl font-black text-red-500 font-mono">{FORMAT_BRL(stats.total)}</h1>
+      </div>
+      <div className="bg-[#111827] rounded-[2.5rem] border border-gray-800 overflow-hidden shadow-xl">
+        <table className="w-full text-left border-collapse">
+          <thead className="bg-[#0b0f1a]/50 text-[10px] font-black uppercase text-gray-500 tracking-widest">
+            <tr>
+              <th className="px-10 py-8 border-b border-gray-800/50">Vendedor</th>
+              <th className="px-10 py-8 border-b border-gray-800/50">Cliente</th>
+              <th className="px-10 py-8 border-b border-gray-800/50">Empresa</th>
+              <th className="px-10 py-8 border-b border-gray-800/50">Comissão Perdida</th>
+              <th className="px-10 py-8 border-b border-gray-800/50 text-center">Data</th>
+              {user?.isAdmin && <th className="px-10 py-8 border-b border-gray-800/50 text-center">Ações</th>}
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-gray-800/40">
+            {stats.filtered.map(c => (
+              <tr key={c.id} className="text-sm text-white hover:bg-white/5 transition-all">
+                <td className="px-10 py-6 font-bold text-red-400 uppercase text-[11px]">{c.vendedor}</td>
+                <td className="px-10 py-6 font-black uppercase tracking-tight">{c.cliente}</td>
+                <td className="px-10 py-6 font-bold text-gray-400">{c.empresa}</td>
+                <td className="px-10 py-6 font-black text-red-500">{FORMAT_BRL(c.valor_comissao)}</td>
+                <td className="px-10 py-6 text-center text-[10px] text-gray-500 font-bold">{new Date(c.dataCriacao).toLocaleDateString('pt-BR')}</td>
+                {user?.isAdmin && (
+                  <td className="px-10 py-6 text-center">
+                    <button onClick={() => onDelete(c.id!)} className="text-red-500 hover:text-red-400 transition">
+                      <i className="fas fa-trash-alt"></i>
+                    </button>
+                  </td>
+                )}
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+};
+
 // --- APP COMPONENT ---
 
 const App: React.FC = () => {
@@ -342,9 +411,10 @@ const App: React.FC = () => {
   const [metas, setMetas] = useState<Meta[]>([]);
   const [indicacoes, setIndicacoes] = useState<Indicacao[]>([]);
   const [empresas, setEmpresas] = useState<Empresa[]>([]);
+  const [cancelamentos, setCancelamentos] = useState<Cancelamento[]>([]);
 
   const [selectedVendas, setSelectedVendas] = useState<string[]>([]);
-  const [modalType, setModalType] = useState<'venda' | 'indicacao' | 'usuario' | 'empresa' | 'meta' | null>(null);
+  const [modalType, setModalType] = useState<'venda' | 'indicacao' | 'usuario' | 'empresa' | 'meta' | 'cancelamento' | null>(null);
   const [editingItem, setEditingItem] = useState<any>(null);
 
   const [distribuirForm, setDistribuirForm] = useState<Partial<Indicacao>>({
@@ -357,7 +427,10 @@ const App: React.FC = () => {
     const unsubMetas = cloud.subscribeMetas(setMetas);
     const unsubIndicacoes = cloud.subscribeIndicacoes(setIndicacoes);
     const unsubEmpresas = cloud.subscribeEmpresas(setEmpresas);
-    return () => { unsubVendas(); unsubUsers(); unsubMetas(); unsubIndicacoes(); unsubEmpresas(); };
+    const unsubCancelamentos = cloud.subscribeCancelamentos(setCancelamentos);
+    return () => { 
+      unsubVendas(); unsubUsers(); unsubMetas(); unsubIndicacoes(); unsubEmpresas(); unsubCancelamentos();
+    };
   }, []);
 
   // Lógica de limpeza automática mensal
@@ -584,6 +657,14 @@ const App: React.FC = () => {
 
       {activeSection === 'comissao' && <FinanceiroView vendas={vendas} user={user} />}
       {activeSection === 'performance' && <PerformanceView vendas={vendas} usuarios={usuarios} />}
+      {activeSection === 'cancelamentos' && (
+        <CancelamentosView 
+          cancelamentos={cancelamentos} 
+          user={user} 
+          onAdd={() => { setEditingItem({ vendedor: '', empresa: '', cliente: '', valor_comissao: 0 }); setModalType('cancelamento'); }} 
+          onDelete={(id) => { if(window.confirm('Excluir cancelamento?')) cloud.apagar('cancelamentos', id); }} 
+        />
+      )}
       
       {activeSection === 'metas' && (
         <div className="space-y-12 animate-in fade-in duration-500 max-w-[1600px] mx-auto">
@@ -867,6 +948,35 @@ const App: React.FC = () => {
       {modalType === 'empresa' && (
         <ModalWrapper title="NOVA SEGURADORA" onClose={() => setModalType(null)} onSave={async () => { await cloud.salvarEmpresa(editingItem); setModalType(null); }}>
           <div className="space-y-2"><label className="text-[9px] font-black uppercase text-gray-500">NOME DA EMPRESA</label><input className="w-full bg-[#0b0f1a] border border-gray-800 p-4 rounded-xl text-white uppercase" value={editingItem?.nome || ''} onChange={e => setEditingItem({...editingItem, nome: e.target.value.toUpperCase()})} /></div>
+        </ModalWrapper>
+      )}
+
+      {modalType === 'cancelamento' && (
+        <ModalWrapper title="CADASTRAR CANCELAMENTO" onClose={() => setModalType(null)} onSave={async () => { await cloud.salvarCancelamento(editingItem); setModalType(null); }}>
+          <div className="space-y-6">
+            <div className="space-y-2">
+              <label className="text-[9px] font-black uppercase text-gray-500">NOME COMPLETO CLIENTE</label>
+              <input className="w-full bg-[#0b0f1a] border border-gray-800 p-4 rounded-xl text-white font-bold uppercase" value={editingItem?.cliente || ''} onChange={e => setEditingItem({...editingItem, cliente: e.target.value.toUpperCase()})} />
+            </div>
+            <div className="space-y-2">
+              <label className="text-[9px] font-black uppercase text-gray-500">EMPRESA</label>
+              <select className="w-full bg-[#0b0f1a] border border-gray-800 p-4 rounded-xl text-white" value={editingItem?.empresa || ''} onChange={e => setEditingItem({...editingItem, empresa: e.target.value})}>
+                <option value="">SELECIONE</option>
+                {empresas.map(emp => <option key={emp.id} value={emp.nome}>{emp.nome}</option>)}
+              </select>
+            </div>
+            <div className="space-y-2">
+              <label className="text-[9px] font-black uppercase text-gray-500">VENDEDOR</label>
+              <select className="w-full bg-[#0b0f1a] border border-gray-800 p-4 rounded-xl text-white font-bold uppercase" value={editingItem?.vendedor || ''} onChange={e => setEditingItem({...editingItem, vendedor: e.target.value})}>
+                <option value="">SELECIONE</option>
+                {Array.from(new Set([...usuarios.map(u => u.nome.toUpperCase()), 'ELEN JACONIS'])).map(nome => <option key={nome} value={nome}>{nome}</option>)}
+              </select>
+            </div>
+            <div className="space-y-2">
+              <label className="text-[9px] font-black uppercase text-gray-500">VALOR DE COMISSÃO (PERDIDA)</label>
+              <input type="number" className="w-full bg-[#0b0f1a] border border-gray-800 p-4 rounded-xl text-white" value={editingItem?.valor_comissao || 0} onChange={e => setEditingItem({...editingItem, valor_comissao: Number(e.target.value)})} />
+            </div>
+          </div>
         </ModalWrapper>
       )}
     </Layout>

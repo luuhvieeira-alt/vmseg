@@ -23,6 +23,15 @@ export interface Empresa {
   nome: string;
 }
 
+export interface Cancelamento {
+  id?: string;
+  cliente: string;
+  empresa: string;
+  vendedor: string;
+  valor_comissao: number;
+  dataCriacao: number;
+}
+
 export type VendaStatus = 'Fazer Vistoria' | 'Mandar Boletos' | 'Falta Pagamento' | 'Pagamento Efetuado';
 
 export interface Venda {

@@ -12,7 +12,7 @@ import {
   updateDoc, 
   setDoc 
 } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
-import { Venda, User, Meta, Indicacao, Empresa } from "../types";
+import { Venda, User, Meta, Indicacao, Empresa, Cancelamento } from "../types";
 
 const firebaseConfig = {
     apiKey: "AIzaSyDvlpoHOKyRXmNG3RVYiTspOQ3TxsHH03s",
@@ -62,6 +62,14 @@ export const cloud = {
             await addDoc(collection(db, "empresas"), data);
         }
     },
+    async salvarCancelamento(d: Cancelamento) {
+        const { id, ...data } = d;
+        if (id) {
+            await updateDoc(doc(db, "cancelamentos", id), data as any);
+        } else {
+            await addDoc(collection(db, "cancelamentos"), { ...data, dataCriacao: Date.now() });
+        }
+    },
     async apagar(col: string, id: string) {
         await deleteDoc(doc(db, col, id));
     },
@@ -91,6 +99,11 @@ export const cloud = {
     subscribeEmpresas(callback: (empresas: Empresa[]) => void) {
         return onSnapshot(query(collection(db, "empresas"), orderBy("nome", "asc")), snap => {
             callback(snap.docs.map(d => ({ id: d.id, ...d.data() } as Empresa)));
+        });
+    },
+    subscribeCancelamentos(callback: (cancelamentos: Cancelamento[]) => void) {
+        return onSnapshot(query(collection(db, "cancelamentos"), orderBy("dataCriacao", "desc")), snap => {
+            callback(snap.docs.map(d => ({ id: d.id, ...d.data() } as Cancelamento)));
         });
     }
 };

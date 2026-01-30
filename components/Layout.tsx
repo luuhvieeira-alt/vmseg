@@ -22,6 +22,7 @@ const NAV_ITEMS: NavItem[] = [
   { id: 'kanban-indicacoes', label: 'Indicações', icon: 'fa-stream', color: '' },
   { id: 'kanban-vendas', label: 'Produção', icon: 'fa-columns', color: '' },
   { id: 'comissao', label: 'Financeiro', icon: 'fa-percentage', color: 'text-green-500' },
+  { id: 'cancelamentos', label: 'Cancelamentos', icon: 'fa-ban', color: 'text-red-500' },
 ];
 
 const ADMIN_ITEMS: NavItem[] = [
