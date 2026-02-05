@@ -405,6 +405,7 @@ const App: React.FC = () => {
   const [searchTerm, setSearchTerm] = useState('');
   const [salesmanFilter, setSalesmanFilter] = useState('TODOS');
   const [dateFilter, setDateFilter] = useState('');
+  const [dateFilterVendas, setDateFilterVendas] = useState('');
 
   const [vendas, setVendas] = useState<Venda[]>([]);
   const [usuarios, setUsuarios] = useState<User[]>([]);
@@ -494,8 +495,17 @@ const App: React.FC = () => {
       const low = searchTerm.toLowerCase();
       list = list.filter(v => (v.cliente || '').toLowerCase().includes(low) || (v.vendedor || '').toLowerCase().includes(low));
     }
+    if (dateFilterVendas) {
+      list = list.filter(v => {
+        const d = new Date(v.dataCriacao);
+        const y = d.getFullYear();
+        const m = String(d.getMonth() + 1).padStart(2, '0');
+        const day = String(d.getDate()).padStart(2, '0');
+        return `${y}-${m}-${day}` === dateFilterVendas;
+      });
+    }
     return list;
-  }, [vendas, user, searchTerm, salesmanFilter]);
+  }, [vendas, user, searchTerm, salesmanFilter, dateFilterVendas]);
 
   const filteredIndicacoes = useMemo(() => {
     let list = user?.isAdmin ? indicacoes : indicacoes.filter(i => (i.vendedor || '').trim().toUpperCase() === (user?.nome || '').trim().toUpperCase());
@@ -564,7 +574,25 @@ const App: React.FC = () => {
       
       {activeSection === 'kanban-vendas' && (
         <div className="space-y-8 animate-in fade-in duration-500">
-          <div className="flex justify-between items-center"><div><h2 className="text-4xl font-black uppercase text-[#3b82f6] tracking-tighter">PRODUÇÃO</h2></div><div className="flex gap-4">{selectedVendas.length > 0 && <button onClick={async () => { if(window.confirm('Excluir selecionados?')) { for(const id of selectedVendas) await cloud.apagar('vendas', id); setSelectedVendas([]); } }} className="bg-red-600 text-white px-8 py-4 rounded-2xl font-black uppercase text-[11px] no-print">Excluir ({selectedVendas.length})</button>}<button onClick={() => { setEditingItem({ status: 'Fazer Vistoria', suhai: false, dataCriacao: Date.now(), vendedor: user?.isAdmin ? '' : user?.nome.toUpperCase() }); setModalType('venda'); }} className="bg-blue-600 text-white px-10 py-4 rounded-2xl font-black uppercase text-[11px] shadow-lg hover:scale-105 transition-all no-print">Lançar Venda</button></div></div>
+          <div className="flex justify-between items-center">
+            <div><h2 className="text-4xl font-black uppercase text-[#3b82f6] tracking-tighter">PRODUÇÃO</h2></div>
+            <div className="flex flex-col items-end gap-2">
+              <div className="flex gap-4">
+                {selectedVendas.length > 0 && <button onClick={async () => { if(window.confirm('Excluir selecionados?')) { for(const id of selectedVendas) await cloud.apagar('vendas', id); setSelectedVendas([]); } }} className="bg-red-600 text-white px-8 py-4 rounded-2xl font-black uppercase text-[11px] no-print">Excluir ({selectedVendas.length})</button>}
+                <button onClick={() => { setEditingItem({ status: 'Fazer Vistoria', suhai: false, dataCriacao: Date.now(), vendedor: user?.isAdmin ? '' : user?.nome.toUpperCase() }); setModalType('venda'); }} className="bg-blue-600 text-white px-10 py-4 rounded-2xl font-black uppercase text-[11px] shadow-lg hover:scale-105 transition-all no-print">Lançar Venda</button>
+              </div>
+              <div className="flex items-center gap-2 no-print">
+                <span className="text-[8px] font-black text-gray-600 uppercase">Filtrar Data:</span>
+                <input 
+                  type="date" 
+                  className="bg-[#111827] border border-gray-800 rounded-lg p-2 text-[10px] font-black uppercase text-gray-400 outline-none focus:border-blue-500 transition-all" 
+                  value={dateFilterVendas} 
+                  onChange={e => setDateFilterVendas(e.target.value)}
+                />
+                {dateFilterVendas && <button onClick={() => setDateFilterVendas('')} className="text-red-500 text-[10px] hover:text-red-400 transition-all"><i className="fas fa-times-circle"></i></button>}
+              </div>
+            </div>
+          </div>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-8 no-print"><input type="text" placeholder="PESQUISAR PRODUÇÃO..." className="w-full bg-[#111827] border border-gray-800 px-6 py-5 rounded-2xl text-[10px] font-black uppercase text-white outline-none focus:border-blue-500 transition-all" value={searchTerm} onChange={e => setSearchTerm(e.target.value)} /><select className="w-full bg-[#111827] border border-gray-800 px-6 py-5 rounded-2xl text-[10px] font-black uppercase text-gray-400 outline-none focus:border-blue-500 transition-all" value={salesmanFilter} onChange={e => setSalesmanFilter(e.target.value)}><option value="TODOS">TODOS VENDEDORES</option>{Array.from(new Set([...usuarios.map(u => u.nome.toUpperCase()), 'ELEN JACONIS'])).map(nome => <option key={nome} value={nome}>{nome}</option>)}</select></div>
           <div className="flex gap-6 overflow-x-auto pb-8 scrollbar-thin h-[calc(100vh-280px)]">
             {VENDA_STATUS_MAP.map(status => (
@@ -576,7 +604,12 @@ const App: React.FC = () => {
                       <input type="checkbox" checked={selectedVendas.includes(v.id!)} onChange={(e) => e.target.checked ? setSelectedVendas([...selectedVendas, v.id!]) : setSelectedVendas(selectedVendas.filter(id => id !== v.id))} className="absolute top-8 left-8 w-4 h-4 no-print" />
                       <button onClick={() => { setEditingItem(v); setModalType('venda'); }} className="absolute top-8 right-8 text-gray-600 hover:text-white transition no-print"><i className="fas fa-pencil-alt text-[10px]"></i></button>
                       <div className="pl-6 space-y-5">
-                        <div><p className="text-sm font-black text-white uppercase leading-tight mb-2">{v.cliente}</p><p className="text-[10px] font-bold text-blue-500">{v.tel}</p><p className="text-[9px] font-black text-gray-600 uppercase mt-2 tracking-widest">{v.empresa || 'SUHAI SEGURADORA'}</p></div>
+                        <div>
+                          <p className="text-sm font-black text-white uppercase leading-tight mb-2">{v.cliente}</p>
+                          <p className="text-[10px] font-bold text-blue-500">{v.tel}</p>
+                          <p className="text-[9px] font-black text-gray-600 uppercase mt-2 tracking-widest">{v.empresa || 'SUHAI SEGURADORA'}</p>
+                          <p className="text-[9px] font-bold text-gray-500 uppercase mt-0.5 tracking-tighter opacity-70">DATA: {new Date(v.dataCriacao).toLocaleDateString('pt-BR')}</p>
+                        </div>
                         <div className="text-center py-5 bg-[#0b0f1a]/50 rounded-2xl border border-gray-800/50"><p className="text-[8px] font-black text-gray-500 uppercase mb-1">Prêmio Líquido</p><h4 className="text-xl font-black text-white">{FORMAT_BRL(v.valor)}</h4></div>
                         <div className="grid grid-cols-2 gap-4"><div className="p-4 rounded-xl border border-gray-800 bg-[#0b0f1a]/30 text-center"><p className="text-[7px] font-black text-gray-600 uppercase mb-1">C. Cheia</p><p className="text-[10px] font-black text-white">{FORMAT_BRL(v.comissao_cheia)}</p></div><div className="p-4 rounded-xl border border-gray-800 bg-[#0b0f1a]/30 text-center"><p className="text-[7px] font-black text-[#10b981] uppercase mb-1">Sua Parte</p><p className="text-[10px] font-black text-[#10b981]">{FORMAT_BRL(v.comissao_vendedor)}</p></div></div>
                         <div className="flex justify-between items-center pt-5 mt-2 border-t border-gray-800/50"><button onClick={() => moveVenda(v, 'left')} className="text-gray-600 hover:text-white transition no-print"><i className="fas fa-chevron-left text-[9px]"></i></button><span className="text-[9px] font-black text-blue-400 uppercase tracking-tighter">{v.vendedor}</span><button onClick={() => moveVenda(v, 'right')} className="text-gray-600 hover:text-white transition no-print"><i className="fas fa-chevron-right text-[9px]"></i></button></div>
@@ -643,7 +676,12 @@ const App: React.FC = () => {
                         <button onClick={() => { setEditingItem(i); setModalType('indicacao'); }} className="text-gray-600 hover:text-white transition"><i className="fas fa-pencil-alt text-[10px]"></i></button>
                       </div>
                       <div className="pl-6 space-y-5">
-                        <div><p className="text-sm font-black text-white uppercase leading-tight mb-2">{i.cliente}</p><p className="text-[10px] font-bold text-yellow-500">{i.tel}</p><p className="text-[10px] font-black text-gray-500 uppercase mt-2 tracking-widest">{i.veiculo || 'SEM VEÍCULO'}</p></div>
+                        <div>
+                          <p className="text-sm font-black text-white uppercase leading-tight mb-2">{i.cliente}</p>
+                          <p className="text-[10px] font-bold text-yellow-500">{i.tel}</p>
+                          <p className="text-[10px] font-black text-gray-500 uppercase mt-2 tracking-widest">{i.veiculo || 'SEM VEÍCULO'}</p>
+                          <p className="text-[9px] font-bold text-gray-500 uppercase mt-0.5 tracking-tighter opacity-70">DATA: {new Date(i.dataCriacao).toLocaleDateString('pt-BR')}</p>
+                        </div>
                         <div className="flex flex-col pt-5 mt-2 border-t border-gray-800/50"><div className="flex justify-between items-center mb-1"><button onClick={() => moveIndicacao(i, 'left')} className="text-gray-600 hover:text-white transition no-print"><i className="fas fa-chevron-left text-[9px]"></i></button><span className="text-[9px] font-black text-gray-500 uppercase tracking-tighter">{i.vendedor || 'SEM VENDEDOR'}</span><button onClick={() => moveIndicacao(i, 'right')} className="text-gray-600 hover:text-white transition no-print"><i className="fas fa-chevron-right text-[9px]"></i></button></div>{i.suhai && <div className="text-center s-suhai-pulse text-[8px] uppercase tracking-widest mt-1 opacity-60">Suhai</div>}</div>
                       </div>
                     </div>
