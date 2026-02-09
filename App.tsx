@@ -496,6 +496,7 @@ const App: React.FC = () => {
       {activeSection === 'performance' && <PerformanceView vendas={vendas} usuarios={usuarios} />}
       {activeSection === 'cancelamentos' && <CancelamentosView cancelamentos={cancelamentos} user={user} onAdd={() => { setEditingItem({ cliente: '', empresa: '', vendedor: '', valor_comissao: 0 }); setModalType('cancelamento'); }} onDelete={(id) => cloud.apagar('cancelamentos', id)} />}
       {activeSection === 'pagamento' && <PagamentoView vendas={vendas} user={user!} />}
+      {activeSection === 'falta-pagar' && <FaltaPagarRHView vendas={vendas} />}
       
       {activeSection === 'vendedores' && (
         <div className="space-y-10 animate-in fade-in duration-500 max-w-[1600px] mx-auto">
@@ -851,24 +852,59 @@ const App: React.FC = () => {
                  </>
               )}
               {modalType === 'venda' && (
-                 <>
-                    <input className="w-full bg-[#0b0f1a] border border-gray-800 p-4 rounded-xl text-white uppercase font-bold" placeholder="Cliente" value={editingItem?.cliente || ''} onChange={e => setEditingItem({...editingItem, cliente: (e.target.value || '').toUpperCase()})} />
-                    <input className="w-full bg-[#0b0f1a] border border-gray-800 p-4 rounded-xl text-white" placeholder="Tel" value={editingItem?.tel || ''} onChange={e => setEditingItem({...editingItem, tel: e.target.value})} />
-                    <select className="w-full bg-[#0b0f1a] border border-gray-800 p-4 rounded-xl text-white font-bold uppercase" value={editingItem?.empresa || ''} onChange={e => setEditingItem({...editingItem, empresa: e.target.value})}>
-                       <option value="">SEGURADORA</option>
-                       {empresas.map(emp => <option key={emp.id} value={emp.nome}>{emp.nome}</option>)}
-                    </select>
-                    <div className="grid grid-cols-2 gap-4">
-                       <input type="number" className="w-full bg-[#0b0f1a] border border-gray-800 p-4 rounded-xl text-white" placeholder="Prêmio" value={editingItem?.valor || 0} onChange={e => setEditingItem({...editingItem, valor: Number(e.target.value)})} />
-                       <input type="number" className="w-full bg-[#0b0f1a] border border-gray-800 p-4 rounded-xl text-white font-bold" placeholder="C. Cheia" value={editingItem?.comissao_cheia || 0} onChange={e => setEditingItem({...editingItem, comissao_cheia: Number(e.target.value)})} />
+                 <div className="space-y-4">
+                    <div className="space-y-1">
+                       <label className="text-[10px] font-black uppercase text-gray-500 ml-2">Cliente</label>
+                       <input className="w-full bg-[#0b0f1a] border border-gray-800 p-4 rounded-xl text-white uppercase font-bold" placeholder="Nome completo" value={editingItem?.cliente || ''} onChange={e => setEditingItem({...editingItem, cliente: (e.target.value || '').toUpperCase()})} />
                     </div>
                     <div className="grid grid-cols-2 gap-4">
-                       <input type="number" className="w-full bg-[#0b0f1a] border border-gray-800 p-4 rounded-xl text-green-500 font-black" placeholder="C. Vend" value={editingItem?.comissao_vendedor || 0} onChange={e => setEditingItem({...editingItem, comissao_vendedor: Number(e.target.value)})} />
-                       <select className="w-full bg-[#0b0f1a] border border-gray-800 p-4 rounded-xl text-white font-black uppercase" value={editingItem?.status || 'Fazer Vistoria'} onChange={e => setEditingItem({...editingItem, status: e.target.value})}>
-                          {VENDA_STATUS_MAP.map(s => <option key={s} value={s}>{s}</option>)}
+                       <div className="space-y-1">
+                          <label className="text-[10px] font-black uppercase text-gray-500 ml-2">Telefone</label>
+                          <input className="w-full bg-[#0b0f1a] border border-gray-800 p-4 rounded-xl text-white" placeholder="(00) 00000-0000" value={editingItem?.tel || ''} onChange={e => setEditingItem({...editingItem, tel: e.target.value})} />
+                       </div>
+                       <div className="space-y-1">
+                          <label className="text-[10px] font-black uppercase text-gray-500 ml-2">Seguradora</label>
+                          <select className="w-full bg-[#0b0f1a] border border-gray-800 p-4 rounded-xl text-white font-bold uppercase" value={editingItem?.empresa || ''} onChange={e => setEditingItem({...editingItem, empresa: e.target.value})}>
+                             <option value="">SELECIONE</option>
+                             {empresas.map(emp => <option key={emp.id} value={emp.nome}>{emp.nome}</option>)}
+                          </select>
+                       </div>
+                    </div>
+                    <div className="space-y-1">
+                       <label className="text-[10px] font-black uppercase text-gray-500 ml-2">Vendedor</label>
+                       <select 
+                          className="w-full bg-[#0b0f1a] border border-gray-800 p-4 rounded-xl text-white font-bold uppercase disabled:opacity-50 disabled:cursor-not-allowed" 
+                          value={editingItem?.vendedor || ''} 
+                          disabled={!user?.isAdmin}
+                          onChange={e => setEditingItem({...editingItem, vendedor: e.target.value})}
+                       >
+                          <option value="">SELECIONE VENDEDOR</option>
+                          {usuarios.filter(u => u.setor === 'VENDEDOR').map(u => <option key={u.id} value={u.nome.toUpperCase()}>{u.nome.toUpperCase()}</option>)}
                        </select>
                     </div>
-                 </>
+                    <div className="grid grid-cols-2 gap-4">
+                       <div className="space-y-1">
+                          <label className="text-[10px] font-black uppercase text-gray-500 ml-2">Prêmio Líquido</label>
+                          <input type="number" className="w-full bg-[#0b0f1a] border border-gray-800 p-4 rounded-xl text-white" placeholder="R$ 0,00" value={editingItem?.valor || 0} onChange={e => setEditingItem({...editingItem, valor: Number(e.target.value)})} />
+                       </div>
+                       <div className="space-y-1">
+                          <label className="text-[10px] font-black uppercase text-gray-500 ml-2">Comissão Cheia</label>
+                          <input type="number" className="w-full bg-[#0b0f1a] border border-gray-800 p-4 rounded-xl text-white font-bold" placeholder="R$ 0,00" value={editingItem?.comissao_cheia || 0} onChange={e => setEditingItem({...editingItem, comissao_cheia: Number(e.target.value)})} />
+                       </div>
+                    </div>
+                    <div className="grid grid-cols-2 gap-4">
+                       <div className="space-y-1">
+                          <label className="text-[10px] font-black uppercase text-green-500 ml-2">Sua Comissão</label>
+                          <input type="number" className="w-full bg-[#0b0f1a] border border-gray-800 p-4 rounded-xl text-green-500 font-black" placeholder="R$ 0,00" value={editingItem?.comissao_vendedor || 0} onChange={e => setEditingItem({...editingItem, comissao_vendedor: Number(e.target.value)})} />
+                       </div>
+                       <div className="space-y-1">
+                          <label className="text-[10px] font-black uppercase text-gray-500 ml-2">Status</label>
+                          <select className="w-full bg-[#0b0f1a] border border-gray-800 p-4 rounded-xl text-white font-black uppercase" value={editingItem?.status || 'Fazer Vistoria'} onChange={e => setEditingItem({...editingItem, status: e.target.value})}>
+                             {VENDA_STATUS_MAP.map(s => <option key={s} value={s}>{s}</option>)}
+                          </select>
+                       </div>
+                    </div>
+                 </div>
               )}
            </div>
         </ModalWrapper>
@@ -1052,6 +1088,91 @@ const PagamentoView: React.FC<{ vendas: Venda[], user: AuthUser }> = ({ vendas, 
            <p className="text-[10px] font-black text-gray-500 uppercase tracking-[0.3em] mb-4">MEU TOTAL A RECEBER</p>
            <h3 className="text-6xl font-black text-green-500 font-mono tracking-tighter">{FORMAT_BRL(totalComissao)}</h3>
         </div>
+      </div>
+    </div>
+  );
+};
+
+// --- VIEW FALTA PAGAR (RH) ---
+const FaltaPagarRHView: React.FC<{ vendas: Venda[] }> = ({ vendas }) => {
+  // Filtra apenas clientes na produção que estão no status "Falta Pagamento"
+  const pendingSales = useMemo(() => vendas.filter(v => v.status === 'Falta Pagamento'), [vendas]);
+
+  const downloadExcel = () => {
+    // Cabeçalho do CSV
+    const headers = ["NOME CLIENTE", "TELEFONE", "SEGURADORA", "VENDEDOR", "COMISSÃO CHEIA"];
+    const rows = pendingSales.map(v => [
+      v.cliente,
+      v.tel,
+      v.empresa,
+      (v.vendedor || '').toUpperCase(),
+      v.comissao_cheia.toString()
+    ]);
+
+    const csvContent = [headers, ...rows].map(e => e.join(",")).join("\n");
+    const blob = new Blob(["\uFEFF" + csvContent], { type: 'text/csv;charset=utf-8;' });
+    const link = document.createElement("a");
+    const url = URL.createObjectURL(blob);
+    link.setAttribute("href", url);
+    link.setAttribute("download", `Clientes_Falta_Pagamento_${new Date().toLocaleDateString('pt-BR')}.csv`);
+    link.style.visibility = 'hidden';
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
+
+  return (
+    <div className="space-y-10 animate-in fade-in duration-500 max-w-[1600px] mx-auto">
+      <div className="flex justify-between items-center">
+        <h2 className="text-4xl font-black uppercase text-yellow-500 tracking-tighter flex items-center gap-3">
+          <i className="fas fa-exclamation-triangle"></i> FALTA PAGAR (PRODUÇÃO)
+        </h2>
+        <button 
+          onClick={downloadExcel} 
+          disabled={pendingSales.length === 0}
+          className={`px-8 py-4 rounded-2xl font-black uppercase text-[10px] flex items-center gap-2 shadow-xl transition-all ${
+            pendingSales.length === 0 
+            ? 'bg-gray-800 text-gray-500 cursor-not-allowed' 
+            : 'bg-green-600 text-white hover:bg-green-500 hover:scale-105 active:scale-95'
+          }`}
+        >
+          <i className="fas fa-file-excel"></i> BAIXAR EM EXCEL
+        </button>
+      </div>
+
+      <div className="bg-[#111827] rounded-[2.5rem] border border-gray-800 overflow-hidden shadow-2xl">
+        <div className="overflow-x-auto">
+          <table className="w-full text-left border-collapse">
+            <thead className="bg-[#0b0f1a]/50 text-[10px] font-black uppercase text-gray-500 tracking-widest">
+              <tr>
+                <th className="px-8 py-6 border-b border-gray-800">NOME CLIENTE</th>
+                <th className="px-8 py-6 border-b border-gray-800">TELEFONE</th>
+                <th className="px-8 py-6 border-b border-gray-800">SEGURADORA</th>
+                <th className="px-8 py-6 border-b border-gray-800">VENDEDOR</th>
+                <th className="px-8 py-6 border-b border-gray-800 text-yellow-500">COMISSÃO CHEIA</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-gray-800/50">
+              {pendingSales.length === 0 ? (
+                <tr><td colSpan={5} className="p-20 text-center text-gray-700 uppercase font-black text-xs tracking-widest">Nenhum cliente em falta de pagamento no momento.</td></tr>
+              ) : (
+                pendingSales.map(v => (
+                  <tr key={v.id} className="text-white text-xs hover:bg-white/5 transition-colors">
+                    <td className="px-8 py-4 font-black uppercase">{v.cliente}</td>
+                    <td className="px-8 py-4 font-bold text-gray-400">{v.tel}</td>
+                    <td className="px-8 py-4 uppercase text-gray-500 font-bold">{v.empresa || 'NÃO INFORMADA'}</td>
+                    <td className="px-8 py-4 font-black uppercase text-blue-400">{v.vendedor}</td>
+                    <td className="px-8 py-4 font-mono font-black text-yellow-500">{FORMAT_BRL(v.comissao_cheia)}</td>
+                  </tr>
+                ))
+              )}
+            </tbody>
+          </table>
+        </div>
+      </div>
+      
+      <div className="flex justify-center pt-4 opacity-30">
+        <p className="text-[9px] font-black text-gray-500 uppercase tracking-widest">A lista é atualizada automaticamente conforme o status na produção.</p>
       </div>
     </div>
   );

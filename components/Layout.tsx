@@ -37,6 +37,7 @@ const ADMIN_ITEMS: NavItem[] = [
 const RH_ITEMS: NavItem[] = [
   { id: 'cadastrar-emissao', label: 'Cadastrar Emissão', icon: 'fa-file-signature', color: 'text-blue-300' },
   { id: 'relatorio-vendas', label: 'Relatório Vendas', icon: 'fa-file-invoice-dollar', color: 'text-green-300' },
+  { id: 'falta-pagar', label: 'Falta Pagar', icon: 'fa-exclamation-triangle', color: 'text-yellow-400' },
 ];
 
 const NavButton: React.FC<{ 
