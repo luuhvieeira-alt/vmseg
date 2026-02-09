@@ -34,6 +34,11 @@ const ADMIN_ITEMS: NavItem[] = [
   { id: 'configuracoes', label: 'Configurações', icon: 'fa-cog', color: 'text-gray-400' },
 ];
 
+const RH_ITEMS: NavItem[] = [
+  { id: 'cadastrar-emissao', label: 'Cadastrar Emissão', icon: 'fa-file-signature', color: 'text-blue-300' },
+  { id: 'relatorio-vendas', label: 'Relatório Vendas', icon: 'fa-file-invoice-dollar', color: 'text-green-300' },
+];
+
 const NavButton: React.FC<{ 
   item: NavItem; 
   activeSection: string; 
@@ -53,6 +58,8 @@ const NavButton: React.FC<{
 );
 
 const Layout: React.FC<LayoutProps> = ({ user, onLogout, activeSection, setActiveSection, children }) => {
+  const isRH = user.setor === 'RH' || user.isAdmin;
+
   return (
     <div className="flex flex-col h-screen overflow-hidden">
       <header className="bg-[#111827] border-b border-gray-800 p-4 flex justify-between items-center sticky top-0 z-50">
@@ -60,7 +67,7 @@ const Layout: React.FC<LayoutProps> = ({ user, onLogout, activeSection, setActiv
           <span className="font-bold text-xl uppercase tracking-tighter font-mono">VM Seguros</span>
         </div>
         <div className="text-xs font-bold text-blue-400 bg-blue-900/20 px-4 py-2 rounded-full uppercase">
-          {user.isAdmin ? user.nome : `SEJA BEM VINDO, ${user.nome}`}
+          {user.isAdmin ? user.nome : `${user.setor}: ${user.nome}`}
         </div>
       </header>
 
@@ -96,6 +103,20 @@ const Layout: React.FC<LayoutProps> = ({ user, onLogout, activeSection, setActiv
               >
                 <i className="fas fa-link w-8"></i>Links Úteis
               </button>
+
+              {/* ÁREA DO RH SEPARADA ABAIXO DE LINKS ÚTEIS */}
+              <div className="pt-4 mt-4 border-t border-gray-700/50">
+                <p className="px-3 mb-2 text-[9px] font-black text-gray-500 uppercase tracking-widest">Setor RH</p>
+                {RH_ITEMS.map(item => (
+                  <NavButton 
+                    key={item.id} 
+                    item={item} 
+                    activeSection={activeSection} 
+                    setActiveSection={setActiveSection} 
+                  />
+                ))}
+              </div>
+
               <button 
                 onClick={onLogout}
                 className="flex items-center w-full p-3 rounded-xl text-[11px] font-bold uppercase text-red-500 mt-4 hover:bg-red-500/10 transition-all"
