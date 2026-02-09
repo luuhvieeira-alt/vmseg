@@ -495,6 +495,7 @@ const App: React.FC = () => {
       {activeSection === 'comissao' && <FinanceiroView vendas={vendas} user={user} />}
       {activeSection === 'performance' && <PerformanceView vendas={vendas} usuarios={usuarios} />}
       {activeSection === 'cancelamentos' && <CancelamentosView cancelamentos={cancelamentos} user={user} onAdd={() => { setEditingItem({ cliente: '', empresa: '', vendedor: '', valor_comissao: 0 }); setModalType('cancelamento'); }} onDelete={(id) => cloud.apagar('cancelamentos', id)} />}
+      {activeSection === 'pagamento' && <PagamentoView vendas={vendas} user={user!} />}
       
       {activeSection === 'vendedores' && (
         <div className="space-y-10 animate-in fade-in duration-500 max-w-[1600px] mx-auto">
@@ -880,19 +881,25 @@ const App: React.FC = () => {
 const RelatorioVendasRHView: React.FC<{ vendas: Venda[], usuarios: User[] }> = ({ vendas, usuarios }) => {
   const [selectedSeller, setSelectedSeller] = useState<string | null>(null);
 
-  // Filtra apenas vendas que vieram do RH (independência)
   const rhVendas = useMemo(() => vendas.filter(v => (v as any).origem === 'RH'), [vendas]);
-
-  // Lista de vendedores que possuem vendas registradas no RH
   const sellersWithSales = useMemo(() => {
     const names = Array.from(new Set(rhVendas.map(v => (v.vendedor || '').toUpperCase())));
     return names.sort();
   }, [rhVendas]);
 
+  const handleLiberarFolha = async (sellerName: string) => {
+    const userToUpdate = usuarios.find(u => u.nome.toUpperCase() === sellerName.toUpperCase());
+    if (userToUpdate) {
+      await cloud.salvarUsuario({ ...userToUpdate, folhaLiberada: true });
+      alert(`Folha de Pagamento liberada para: ${sellerName}`);
+    } else {
+      alert("Usuário não encontrado.");
+    }
+  };
+
   if (selectedSeller) {
     const sellerSales = rhVendas.filter(v => (v.vendedor || '').toUpperCase() === selectedSeller);
     const totalComissaoRealizada = sellerSales.reduce((acc, v) => acc + Number(v.comissao_vendedor || 0), 0);
-    const totalComissaoCheia = sellerSales.reduce((acc, v) => acc + Number(v.comissao_cheia || 0), 0);
 
     return (
       <div className="space-y-10 animate-in slide-in-from-right duration-500">
@@ -901,9 +908,17 @@ const RelatorioVendasRHView: React.FC<{ vendas: Venda[], usuarios: User[] }> = (
              <button onClick={() => setSelectedSeller(null)} className="text-blue-400 hover:text-white transition"><i className="fas fa-arrow-left text-2xl"></i></button>
              <h2 className="text-4xl font-black uppercase text-blue-400 tracking-tighter">VENDAS RH: {selectedSeller}</h2>
           </div>
-          <button onClick={() => window.print()} className="bg-blue-600 text-white px-6 py-3 rounded-xl font-bold uppercase text-[10px] flex items-center gap-2 no-print shadow-lg hover:scale-105 transition-all">
-            <i className="fas fa-print"></i> IMPRIMIR LISTA
-          </button>
+          <div className="flex gap-4">
+            <button 
+                onClick={() => handleLiberarFolha(selectedSeller)} 
+                className="bg-green-600 text-white px-6 py-3 rounded-xl font-bold uppercase text-[10px] flex items-center gap-2 no-print shadow-lg hover:bg-green-500 transition-all"
+            >
+                <i className="fas fa-unlock"></i> LIBERAR FOLHA
+            </button>
+            <button onClick={() => window.print()} className="bg-blue-600 text-white px-6 py-3 rounded-xl font-bold uppercase text-[10px] flex items-center gap-2 no-print shadow-lg hover:scale-105 transition-all">
+                <i className="fas fa-print"></i> IMPRIMIR LISTA
+            </button>
+          </div>
         </div>
 
         <div className="bg-[#111827] rounded-[2.5rem] border border-gray-800 overflow-hidden shadow-2xl">
@@ -937,14 +952,10 @@ const RelatorioVendasRHView: React.FC<{ vendas: Venda[], usuarios: User[] }> = (
           </div>
         </div>
 
-        <div className="flex justify-end gap-6">
-          <div className="bg-[#111827] p-8 rounded-[2rem] border border-gray-800 border-l-4 border-l-blue-500 shadow-xl min-w-[300px]">
-             <p className="text-[9px] font-black text-gray-500 uppercase tracking-widest mb-2">TOTAL COMISSÃO CHEIA</p>
-             <h3 className="text-3xl font-black text-white font-mono">{FORMAT_BRL(totalComissaoCheia)}</h3>
-          </div>
-          <div className="bg-[#111827] p-8 rounded-[2rem] border border-gray-800 border-l-4 border-l-green-500 shadow-xl min-w-[300px]">
-             <p className="text-[9px] font-black text-gray-500 uppercase tracking-widest mb-2">VALOR TOTAL COMISSÃO REALIZADA</p>
-             <h3 className="text-4xl font-black text-green-500 font-mono tracking-tighter">{FORMAT_BRL(totalComissaoRealizada)}</h3>
+        <div className="flex justify-center pt-6">
+          <div className="bg-[#111827] p-12 rounded-[3rem] border border-gray-800 border-l-8 border-l-green-500 shadow-2xl min-w-[500px] text-center">
+             <p className="text-[10px] font-black text-gray-500 uppercase tracking-[0.3em] mb-4">VALOR TOTAL COMISSÃO REALIZADA</p>
+             <h3 className="text-6xl font-black text-green-500 font-mono tracking-tighter">{FORMAT_BRL(totalComissaoRealizada)}</h3>
           </div>
         </div>
       </div>
@@ -985,6 +996,63 @@ const RelatorioVendasRHView: React.FC<{ vendas: Venda[], usuarios: User[] }> = (
           })}
         </div>
       )}
+    </div>
+  );
+};
+
+// --- VIEW PAGAMENTO (VENDEDOR) ---
+const PagamentoView: React.FC<{ vendas: Venda[], user: AuthUser }> = ({ vendas, user }) => {
+  const sellerName = (user.nome || '').toUpperCase();
+  const sellerSales = useMemo(() => 
+    vendas.filter(v => (v as any).origem === 'RH' && (v.vendedor || '').toUpperCase() === sellerName), 
+    [vendas, sellerName]
+  );
+  const totalComissao = sellerSales.reduce((acc, v) => acc + Number(v.comissao_vendedor || 0), 0);
+
+  return (
+    <div className="space-y-10 animate-in fade-in duration-500 max-w-[1600px] mx-auto">
+      <div className="flex justify-between items-center">
+        <h2 className="text-4xl font-black uppercase text-green-500 tracking-tighter">CONFERÊNCIA DE PAGAMENTO</h2>
+        <p className="text-gray-500 font-bold uppercase text-[10px]">Apenas Visualização</p>
+      </div>
+
+      <div className="bg-[#111827] rounded-[2.5rem] border border-gray-800 overflow-hidden shadow-2xl">
+        <div className="overflow-x-auto">
+          <table className="w-full text-left border-collapse">
+            <thead className="bg-[#0b0f1a]/50 text-[10px] font-black uppercase text-gray-500 tracking-widest">
+              <tr>
+                <th className="px-8 py-6 border-b border-gray-800">DATA</th>
+                <th className="px-8 py-6 border-b border-gray-800">CLIENTE</th>
+                <th className="px-8 py-6 border-b border-gray-800">SEGURADORA</th>
+                <th className="px-8 py-6 border-b border-gray-800">PRÊMIO</th>
+                <th className="px-8 py-6 border-b border-gray-800 text-green-500">COMISSÃO</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-gray-800/50">
+              {sellerSales.length === 0 ? (
+                <tr><td colSpan={5} className="p-16 text-center text-gray-700 uppercase font-black text-xs">Aguardando lançamentos do RH...</td></tr>
+              ) : (
+                sellerSales.map(v => (
+                  <tr key={v.id} className="text-white text-xs">
+                    <td className="px-8 py-4 font-mono">{new Date(v.dataCriacao).toLocaleDateString('pt-BR')}</td>
+                    <td className="px-8 py-4 font-black uppercase">{v.cliente}</td>
+                    <td className="px-8 py-4 text-gray-400 uppercase">{v.empresa}</td>
+                    <td className="px-8 py-4 font-mono">{FORMAT_BRL(v.valor)}</td>
+                    <td className="px-8 py-4 font-mono font-bold text-green-500">{FORMAT_BRL(v.comissao_vendedor)}</td>
+                  </tr>
+                ))
+              )}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <div className="flex justify-center pt-6">
+        <div className="bg-[#111827] p-12 rounded-[3rem] border border-gray-800 border-l-8 border-l-green-500 shadow-2xl min-w-[500px] text-center">
+           <p className="text-[10px] font-black text-gray-500 uppercase tracking-[0.3em] mb-4">MEU TOTAL A RECEBER</p>
+           <h3 className="text-6xl font-black text-green-500 font-mono tracking-tighter">{FORMAT_BRL(totalComissao)}</h3>
+        </div>
+      </div>
     </div>
   );
 };

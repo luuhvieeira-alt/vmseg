@@ -83,6 +83,21 @@ const Layout: React.FC<LayoutProps> = ({ user, onLogout, activeSection, setActiv
               />
             ))}
             
+            {/* Botão PAGAMENTO liberado pelo RH para vendedores */}
+            {user.setor === 'VENDEDOR' && user.folhaLiberada && (
+              <button
+                onClick={() => setActiveSection('pagamento')}
+                className={`flex items-center w-full p-3 rounded-xl text-[11px] font-black uppercase transition-all duration-200 border-l-4 border-transparent mt-2 ${
+                  activeSection === 'pagamento' 
+                  ? 'bg-green-600/20 text-green-400 border-green-500 shadow-inner' 
+                  : 'text-green-500/60 hover:bg-green-500/10 hover:text-green-400'
+                }`}
+              >
+                <i className="fas fa-hand-holding-usd w-8"></i>
+                PAGAMENTO
+              </button>
+            )}
+            
             {user.isAdmin && (
               <div className="pt-2 mt-2 border-t border-gray-800 space-y-1">
                 {ADMIN_ITEMS.map(item => (

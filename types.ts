@@ -8,6 +8,7 @@ export interface User {
   senha?: string;
   setor: UserRole;
   comissao: number;
+  folhaLiberada?: boolean;
 }
 
 export interface Meta {
