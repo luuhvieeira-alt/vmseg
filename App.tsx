@@ -669,7 +669,7 @@ const App: React.FC = () => {
                     await cloud.salvarIndicacao({...editingItem, status: 'NOVA INDICAÇÃO', dataCriacao: Date.now()}); 
                     alert("Lead distribuído com sucesso!"); 
                     setEditingItem({});
-                    setActiveSection('kanban-indicacoes');
+                    // Mantendo na página para novos cadastros como solicitado
                  }} className="w-full bg-yellow-500 p-6 rounded-3xl font-black uppercase text-black shadow-xl hover:bg-yellow-400 transition-all">CONFIRMAR ENVIO DO LEAD</button>
               </div>
            </div>
@@ -877,7 +877,7 @@ const App: React.FC = () => {
   );
 };
 
-// --- VIEW RELATORIO VENDAS RH - REFORMULADA ---
+// --- VIEW RELATORIO VENDAS RH ---
 const RelatorioVendasRHView: React.FC<{ vendas: Venda[], usuarios: User[] }> = ({ vendas, usuarios }) => {
   const [selectedSeller, setSelectedSeller] = useState<string | null>(null);
 
@@ -955,7 +955,7 @@ const RelatorioVendasRHView: React.FC<{ vendas: Venda[], usuarios: User[] }> = (
         <div className="flex justify-center pt-6">
           <div className="bg-[#111827] p-12 rounded-[3rem] border border-gray-800 border-l-8 border-l-green-500 shadow-2xl min-w-[500px] text-center">
              <p className="text-[10px] font-black text-gray-500 uppercase tracking-[0.3em] mb-4">VALOR TOTAL COMISSÃO REALIZADA</p>
-             <h3 className="text-6xl font-black text-green-500 font-mono tracking-tighter">{FORMAT_BRL(totalComissaoRealizada)}</h3>
+             <h3 className="text-7xl font-black text-green-500 font-mono tracking-tighter">{FORMAT_BRL(totalComissaoRealizada)}</h3>
           </div>
         </div>
       </div>
