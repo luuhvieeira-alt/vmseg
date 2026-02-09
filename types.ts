@@ -39,13 +39,16 @@ export interface Venda {
   cliente: string;
   tel: string;
   vendedor: string;
-  empresa: string; // Novo campo
+  empresa: string;
   valor: number;
   comissao_cheia: number;
   comissao_vendedor: number;
   suhai: boolean;
   status: VendaStatus;
   dataCriacao: number;
+  // Campos para o Setor RH
+  porcentagem_vendida?: number;
+  origem?: 'RH';
 }
 
 export type IndicacaoStatus = 'NOVA INDICAÇÃO' | 'WHATSAPP' | 'COTAÇÃO REALIZADA' | 'COBRAR ATENÇÃO' | 'NUMERO INVALIDO';

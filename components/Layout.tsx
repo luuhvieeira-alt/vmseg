@@ -104,18 +104,20 @@ const Layout: React.FC<LayoutProps> = ({ user, onLogout, activeSection, setActiv
                 <i className="fas fa-link w-8"></i>Links Úteis
               </button>
 
-              {/* ÁREA DO RH SEPARADA ABAIXO DE LINKS ÚTEIS */}
-              <div className="pt-4 mt-4 border-t border-gray-700/50">
-                <p className="px-3 mb-2 text-[9px] font-black text-gray-500 uppercase tracking-widest">Setor RH</p>
-                {RH_ITEMS.map(item => (
-                  <NavButton 
-                    key={item.id} 
-                    item={item} 
-                    activeSection={activeSection} 
-                    setActiveSection={setActiveSection} 
-                  />
-                ))}
-              </div>
+              {/* ÁREA DO RH SEPARADA - RESTRITA */}
+              {isRH && (
+                <div className="pt-4 mt-4 border-t border-gray-700/50 animate-in fade-in duration-500">
+                  <p className="px-3 mb-2 text-[9px] font-black text-gray-500 uppercase tracking-widest">Setor RH</p>
+                  {RH_ITEMS.map(item => (
+                    <NavButton 
+                      key={item.id} 
+                      item={item} 
+                      activeSection={activeSection} 
+                      setActiveSection={setActiveSection} 
+                    />
+                  ))}
+                </div>
+              )}
 
               <button 
                 onClick={onLogout}
