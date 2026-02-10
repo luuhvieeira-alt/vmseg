@@ -210,14 +210,12 @@ const App: React.FC = () => {
 
   const filteredVendas = vendas.filter(v => {
     const matchesSalesman = (currentUserData.setor === 'ADMIN' || currentUserData.setor === 'RH') ? (salesmanFilter === 'TODOS' || (v.vendedor || '').toUpperCase() === salesmanFilter.toUpperCase()) : (v.vendedor || '').toUpperCase() === (currentUserData.nome || '').toUpperCase();
-    // FIX: Adição de guards para evitar erro 'includes' de undefined
     const matchesSearch = (v.cliente || '').toUpperCase().includes(searchTerm.toUpperCase()) || (v.tel || '').includes(searchTerm);
     return matchesSalesman && matchesSearch;
   });
 
   const filteredIndicacoes = indicacoes.filter(i => {
     const matchesSalesman = (currentUserData.setor === 'ADMIN' || currentUserData.setor === 'RH') ? (salesmanFilter === 'TODOS' || (i.vendedor || '').toUpperCase() === salesmanFilter.toUpperCase()) : (i.vendedor || '').toUpperCase() === (currentUserData.nome || '').toUpperCase();
-    // FIX: Adição de guards para evitar erro 'includes' de undefined
     const matchesSearch = (i.cliente || '').toUpperCase().includes(searchTerm.toUpperCase()) || (i.tel || '').includes(searchTerm);
     return matchesSalesman && matchesSearch;
   });
@@ -339,6 +337,46 @@ const App: React.FC = () => {
                 </div>
              ))}
            </div>
+        </div>
+      )}
+
+      {/* MINHA FOLHA DE PAGAMENTO (VENDEDOR) */}
+      {activeSection === 'pagamento' && currentUserData.setor === 'VENDEDOR' && (
+        <div className="space-y-10 animate-in fade-in duration-500 max-w-[1600px] mx-auto px-4">
+          <div className="flex justify-between items-center">
+            <h2 className="text-[32px] font-black text-green-400 uppercase tracking-tighter">MINHA FOLHA DE PAGAMENTO</h2>
+            <button onClick={() => window.print()} className="bg-green-600 text-white px-6 py-3 rounded-xl font-black text-[9px] uppercase shadow-lg hover:bg-green-500 transition-all"><i className="fas fa-print mr-2"></i> IMPRIMIR MINHA FOLHA</button>
+          </div>
+          <div id="financeiro-table" className="bg-[#111827] rounded-[1.5rem] border border-gray-800/30 overflow-hidden shadow-2xl">
+            <table className="w-full text-left border-collapse">
+              <thead className="bg-[#0b0f1a]/80 text-[8px] font-black uppercase text-gray-500 border-b border-gray-800/50"><tr><th className="px-8 py-6 tracking-widest">DATA</th><th className="px-8 py-6 tracking-widest">CLIENTE</th><th className="px-8 py-6 tracking-widest">SEGURADORA</th><th className="px-8 py-6 tracking-widest">PRÊMIO LÍQUIDO</th><th className="px-8 py-6 tracking-widest">C. CHEIA</th><th className="px-8 py-6 tracking-widest">% VEND</th><th className="px-8 py-6 tracking-widest">COMISSÃO</th></tr></thead>
+              <tbody className="divide-y divide-gray-800/30">
+                {vendas.filter(v => (v.vendedor || '').toUpperCase() === (currentUserData.nome || '').toUpperCase() && v.origem === 'RH').map(v => (
+                  <tr key={v.id} className="hover:bg-white/5 transition-colors group">
+                    <td className="px-8 py-5 text-gray-500 font-bold text-[9px]">{new Date(v.dataCriacao).toLocaleDateString('pt-BR')}</td>
+                    <td className="px-8 py-5 text-white font-black text-[10px] uppercase tracking-tight">{v.cliente}</td>
+                    <td className="px-8 py-5 text-gray-500 font-bold text-[9px] uppercase">{v.empresa}</td>
+                    <td className="px-8 py-5 text-white font-bold text-[10px] font-mono">{FORMAT_BRL(v.valor)}</td>
+                    <td className="px-8 py-5 text-blue-400 font-black text-[10px] font-mono">{FORMAT_BRL(v.comissao_cheia)}</td>
+                    <td className="px-8 py-5 text-orange-400 font-black text-[10px] font-mono">{v.porcentagem_vendida || 0}%</td>
+                    <td className="px-8 py-5 text-green-500 font-black text-[10px] font-mono">{FORMAT_BRL(v.comissao_vendedor)}</td>
+                  </tr>
+                ))}
+                {vendas.filter(v => (v.vendedor || '').toUpperCase() === (currentUserData.nome || '').toUpperCase() && v.origem === 'RH').length === 0 && (
+                  <tr><td colSpan={7} className="px-10 py-12 text-center text-gray-600 font-black uppercase text-[10px] tracking-widest">Nenhum lançamento encontrado em sua folha</td></tr>
+                )}
+              </tbody>
+            </table>
+          </div>
+          <div className="flex justify-center mt-12 pb-10">
+            <div className="bg-[#111827] p-10 rounded-[2.5rem] border border-gray-800/50 text-center min-w-[400px] shadow-2xl relative group overflow-hidden">
+               <p className="text-[10px] font-black text-gray-500 uppercase tracking-[0.3em] mb-4">VALOR TOTAL A RECEBER</p>
+               <h4 className="text-[72px] font-black text-green-500 tracking-tighter leading-none font-mono">
+                 {FORMAT_BRL(vendas.filter(v => (v.vendedor || '').toUpperCase() === (currentUserData.nome || '').toUpperCase() && v.origem === 'RH').reduce((acc, curr) => acc + Number(curr.comissao_vendedor || 0), 0))}
+               </h4>
+               <div className="absolute inset-0 border-2 border-green-500/5 rounded-[2.5rem] pointer-events-none group-hover:border-green-500/20 transition-all duration-700"></div>
+            </div>
+          </div>
         </div>
       )}
 
@@ -673,7 +711,6 @@ const App: React.FC = () => {
           onSave={async () => { 
             if(modalType === 'venda') {
                 const { leadIdToDelete, ...itemToSave } = editingItem;
-                // FIX: Remover o ID antigo se for conversão de Lead para não causar erro no updateDoc
                 if (leadIdToDelete) { delete (itemToSave as any).id; }
                 await cloud.salvarVenda(itemToSave);
                 if (leadIdToDelete) await cloud.apagar('indicacoes', leadIdToDelete);
