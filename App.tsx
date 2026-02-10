@@ -193,7 +193,13 @@ const App: React.FC = () => {
     if (nextIdx >= 0 && nextIdx < INDICACAO_STATUS_MAP.length) await cloud.updateStatus('indicacoes', i.id!, INDICACAO_STATUS_MAP[nextIdx]);
   };
 
-  const currentUserData = user?.isAdmin ? user : (usuarios.find(u => u.id === user?.id) || user);
+  // Fix: Ensure currentUserData is always typed as AuthUser to prevent 'isAdmin' property access errors.
+  const currentUserData = useMemo(() => {
+    if (!user) return null;
+    const dbUser = usuarios.find(u => u.id === user.id);
+    if (!dbUser) return user;
+    return { ...dbUser, isAdmin: dbUser.setor === 'ADMIN' } as AuthUser;
+  }, [user, usuarios]);
 
   if (!isAuthenticated || !currentUserData) return (
     <div className="min-h-screen bg-[#0b0f1a] flex flex-col items-center justify-center p-6 text-center">
@@ -351,7 +357,7 @@ const App: React.FC = () => {
             <table className="w-full text-left border-collapse">
               <thead className="bg-[#0b0f1a]/80 text-[8px] font-black uppercase text-gray-500 border-b border-gray-800/50"><tr><th className="px-8 py-6 tracking-widest">DATA</th><th className="px-8 py-6 tracking-widest">CLIENTE</th><th className="px-8 py-6 tracking-widest">SEGURADORA</th><th className="px-8 py-6 tracking-widest">PRÊMIO LÍQUIDO</th><th className="px-8 py-6 tracking-widest">C. CHEIA</th><th className="px-8 py-6 tracking-widest">% VEND</th><th className="px-8 py-6 tracking-widest">COMISSÃO</th></tr></thead>
               <tbody className="divide-y divide-gray-800/30">
-                {vendas.filter(v => (v.vendedor || '').toUpperCase() === (currentUserData.nome || '').toUpperCase() && v.origem === 'RH').map(v => (
+                {vendas.filter(v => (v.vendedor || '').trim().toUpperCase() === (currentUserData.nome || '').trim().toUpperCase() && v.origem === 'RH').map(v => (
                   <tr key={v.id} className="hover:bg-white/5 transition-colors group">
                     <td className="px-8 py-5 text-gray-500 font-bold text-[9px]">{new Date(v.dataCriacao).toLocaleDateString('pt-BR')}</td>
                     <td className="px-8 py-5 text-white font-black text-[10px] uppercase tracking-tight">{v.cliente}</td>
@@ -362,7 +368,7 @@ const App: React.FC = () => {
                     <td className="px-8 py-5 text-green-500 font-black text-[10px] font-mono">{FORMAT_BRL(v.comissao_vendedor)}</td>
                   </tr>
                 ))}
-                {vendas.filter(v => (v.vendedor || '').toUpperCase() === (currentUserData.nome || '').toUpperCase() && v.origem === 'RH').length === 0 && (
+                {vendas.filter(v => (v.vendedor || '').trim().toUpperCase() === (currentUserData.nome || '').trim().toUpperCase() && v.origem === 'RH').length === 0 && (
                   <tr><td colSpan={7} className="px-10 py-12 text-center text-gray-600 font-black uppercase text-[10px] tracking-widest">Nenhum lançamento encontrado em sua folha</td></tr>
                 )}
               </tbody>
@@ -372,7 +378,7 @@ const App: React.FC = () => {
             <div className="bg-[#111827] p-10 rounded-[2.5rem] border border-gray-800/50 text-center min-w-[400px] shadow-2xl relative group overflow-hidden">
                <p className="text-[10px] font-black text-gray-500 uppercase tracking-[0.3em] mb-4">VALOR TOTAL A RECEBER</p>
                <h4 className="text-[72px] font-black text-green-500 tracking-tighter leading-none font-mono">
-                 {FORMAT_BRL(vendas.filter(v => (v.vendedor || '').toUpperCase() === (currentUserData.nome || '').toUpperCase() && v.origem === 'RH').reduce((acc, curr) => acc + Number(curr.comissao_vendedor || 0), 0))}
+                 {FORMAT_BRL(vendas.filter(v => (v.vendedor || '').trim().toUpperCase() === (currentUserData.nome || '').trim().toUpperCase() && v.origem === 'RH').reduce((acc, curr) => acc + Number(curr.comissao_vendedor || 0), 0))}
                </h4>
                <div className="absolute inset-0 border-2 border-green-500/5 rounded-[2.5rem] pointer-events-none group-hover:border-green-500/20 transition-all duration-700"></div>
             </div>
@@ -505,7 +511,18 @@ const App: React.FC = () => {
           </div>
           <div id="financeiro-table" className="bg-[#111827] rounded-[1.5rem] border border-gray-800/30 overflow-hidden shadow-2xl">
             <table className="w-full text-left border-collapse">
-              <thead className="bg-[#0b0f1a]/80 text-[8px] font-black uppercase text-gray-500 border-b border-gray-800/50"><tr><th className="px-8 py-6 tracking-widest">DATA</th><th className="px-8 py-6 tracking-widest">CLIENTE</th><th className="px-8 py-6 tracking-widest">SEGURADORA</th><th className="px-8 py-6 tracking-widest">PRÊMIO</th><th className="px-8 py-6 tracking-widest">C. CHEIA</th><th className="px-8 py-6 tracking-widest">% VEND</th><th className="px-8 py-6 tracking-widest">COMISSÃO</th></tr></thead>
+              <thead className="bg-[#0b0f1a]/80 text-[8px] font-black uppercase text-gray-500 border-b border-gray-800/50">
+                <tr>
+                  <th className="px-8 py-6 tracking-widest">DATA</th>
+                  <th className="px-8 py-6 tracking-widest">CLIENTE</th>
+                  <th className="px-8 py-6 tracking-widest">SEGURADORA</th>
+                  <th className="px-8 py-6 tracking-widest">PRÊMIO</th>
+                  <th className="px-8 py-6 tracking-widest">C. CHEIA</th>
+                  <th className="px-8 py-6 tracking-widest">% VEND</th>
+                  <th className="px-8 py-6 tracking-widest">COMISSÃO</th>
+                  {currentUserData.isAdmin && <th className="px-8 py-6 tracking-widest text-center">AÇÕES</th>}
+                </tr>
+              </thead>
               <tbody className="divide-y divide-gray-800/30">
                 {vendas.filter(v => v.vendedor === selectedSellerRh && v.origem === 'RH').map(v => (
                   <tr key={v.id} className="hover:bg-white/5 transition-colors group">
@@ -516,6 +533,18 @@ const App: React.FC = () => {
                     <td className="px-8 py-5 text-blue-400 font-black text-[10px] font-mono">{FORMAT_BRL(v.comissao_cheia)}</td>
                     <td className="px-8 py-5 text-orange-400 font-black text-[10px] font-mono">{v.porcentagem_vendida || 0}%</td>
                     <td className="px-8 py-5 text-green-500 font-black text-[10px] font-mono">{FORMAT_BRL(v.comissao_vendedor)}</td>
+                    {currentUserData.isAdmin && (
+                      <td className="px-8 py-5 text-center">
+                        <div className="flex justify-center gap-3">
+                          <button onClick={() => { setEditingItem(v); setModalType('venda'); }} className="text-blue-400 hover:text-blue-300 transition-colors">
+                            <i className="fas fa-edit text-xs"></i>
+                          </button>
+                          <button onClick={() => { if(window.confirm('Excluir este lançamento de venda do relatório?')) cloud.apagar('vendas', v.id!) }} className="text-red-600 hover:text-red-500 transition-colors">
+                            <i className="fas fa-trash-alt text-xs"></i>
+                          </button>
+                        </div>
+                      </td>
+                    )}
                   </tr>
                 ))}
               </tbody>
