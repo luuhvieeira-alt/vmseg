@@ -244,7 +244,18 @@ const App: React.FC = () => {
                     {filteredIndicacoes.filter(i => i.status === status).map(i => (
                       <div key={i.id} className="bg-[#111827] rounded-[2.2rem] p-8 border border-gray-800/30 shadow-xl relative group transition-all hover:border-yellow-500/20">
                         <div className="absolute top-8 right-8 flex gap-4">
-                          <button onClick={() => { setEditingItem({ ...i, leadIdToDelete: i.id, status: 'Fazer Vistoria', dataCriacao: Date.now(), valor: 0, comissao_cheia: 0, comissao_vendedor: 0 }); setModalType('venda'); }} className="text-[#10b981] hover:scale-110 transition opacity-60 hover:opacity-100"><i className="fas fa-check text-base"></i></button>
+                          <button onClick={() => { 
+                            const { id, ...leadData } = i;
+                            setEditingItem({ 
+                              ...leadData, 
+                              leadIdToDelete: id, 
+                              status: 'Fazer Vistoria', 
+                              valor: 0, 
+                              comissao_cheia: 0, 
+                              comissao_vendedor: 0 
+                            }); 
+                            setModalType('venda'); 
+                          }} className="text-[#10b981] hover:scale-110 transition opacity-60 hover:opacity-100"><i className="fas fa-check text-base"></i></button>
                           <button onClick={() => { if(window.confirm('Excluir lead?')) cloud.apagar('indicacoes', i.id!) }} className="text-red-500 hover:scale-110 transition opacity-40 hover:opacity-100"><i className="fas fa-trash-alt text-base"></i></button>
                           <button onClick={() => { setEditingItem(i); setModalType('indicacao'); }} className="text-gray-500 hover:text-white transition"><i className="fas fa-edit text-sm"></i></button>
                         </div>
@@ -317,7 +328,7 @@ const App: React.FC = () => {
 
       {/* --- SETOR RH --- */}
 
-      {/* FALTA PAGAR (PRODUÇÃO) - RÉPLICA DO NOVO PRINT */}
+      {/* FALTA PAGAR (PRODUÇÃO) - RÉPLICA DO PRINT */}
       {activeSection === 'falta-pagar' && (
         <div className="space-y-10 animate-in fade-in duration-500 max-w-full px-10">
           <div className="flex justify-between items-center">
@@ -548,7 +559,7 @@ const App: React.FC = () => {
         </div>
       )}
 
-      {/* CONFIGURAÇÕES - RESTAURADA */}
+      {/* CONFIGURAÇÕES - DEFINITIVA */}
       {activeSection === 'configuracoes' && currentUserData.setor === 'ADMIN' && (
         <div className="space-y-10 max-w-[1200px] mx-auto animate-in fade-in duration-500 px-4">
            <div className="flex justify-between items-center">
@@ -617,6 +628,8 @@ const App: React.FC = () => {
           onSave={async () => { 
             if(modalType === 'venda') {
                 const { leadIdToDelete, ...itemToSave } = editingItem;
+                // FIX: Remover o ID antigo se for conversão de Lead para não causar erro no updateDoc
+                if (leadIdToDelete) { delete (itemToSave as any).id; }
                 await cloud.salvarVenda(itemToSave);
                 if (leadIdToDelete) await cloud.apagar('indicacoes', leadIdToDelete);
             } else if(modalType === 'indicacao') { await cloud.salvarIndicacao(editingItem);
