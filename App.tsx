@@ -9,7 +9,7 @@ import Layout from './components/Layout';
 const ModalWrapper: React.FC<{ 
   title: string; 
   onClose: () => void; 
-  onSave: () => void; 
+  onSave: () => void | Promise<void>; 
   children: React.ReactNode;
   hideSave?: boolean;
   isYellow?: boolean;
@@ -26,14 +26,14 @@ const ModalWrapper: React.FC<{
       <div className="p-6 border-t border-gray-800 flex gap-4 bg-[#0b0f1a]/30">
         <button onClick={onClose} className="flex-1 bg-[#1e293b] hover:bg-gray-700 text-white p-4 rounded-xl font-black uppercase text-[10px] transition-all tracking-widest">Cancelar</button>
         {!hideSave && (
-          <button onClick={onSave} className={`flex-1 p-4 rounded-xl font-black uppercase text-[10px] shadow-lg transition-all tracking-widest ${isYellow ? 'bg-yellow-500 text-black hover:bg-yellow-400' : 'bg-[#2563eb] text-white hover:bg-blue-500'}`}>Salvar</button>
+          <button onClick={() => onSave()} className={`flex-1 p-4 rounded-xl font-black uppercase text-[10px] shadow-lg transition-all tracking-widest ${isYellow ? 'bg-yellow-500 text-black hover:bg-yellow-400' : 'bg-[#2563eb] text-white hover:bg-blue-500'}`}>Salvar</button>
         )}
       </div>
     </div>
   </div>
 );
 
-// --- VIEW DASHBOARD (RÉPLICA 100%) ---
+// --- VIEW DASHBOARD ---
 const DashboardView: React.FC<{ vendas: Venda[], indicacoes: Indicacao[], metas: Meta[], user: AuthUser | null }> = ({ vendas, indicacoes, metas, user }) => {
   const stats = useMemo(() => {
     const now = new Date();
@@ -41,7 +41,6 @@ const DashboardView: React.FC<{ vendas: Venda[], indicacoes: Indicacao[], metas:
     const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1).getTime();
     const uNome = (user?.nome || '').trim().toUpperCase();
     
-    // Filtro base: Vendas que NÃO são do RH para o Dashboard
     const baseVendas = (user?.isAdmin || user?.setor === 'RH') ? vendas : vendas.filter(v => (v.vendedor || '').trim().toUpperCase() === uNome);
     const dashboardVendas = baseVendas.filter(v => v.origem !== 'RH');
     
@@ -76,7 +75,6 @@ const DashboardView: React.FC<{ vendas: Venda[], indicacoes: Indicacao[], metas:
   return (
     <div className="space-y-10 animate-in fade-in duration-500 max-w-[1600px] mx-auto px-4">
       <h2 className="text-3xl font-black uppercase text-white tracking-tighter text-center mb-8">VOCÊ SÓ VENCE AMANHÃ SE NÃO DESISTIR HOJE!</h2>
-      
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
         <div className="bg-[#111827] p-8 rounded-[1.5rem] border border-gray-800 shadow-xl relative overflow-hidden">
           <p className="text-gray-500 text-[9px] font-black uppercase mb-3 tracking-widest">VENDAS (HOJE)</p>
@@ -99,7 +97,6 @@ const DashboardView: React.FC<{ vendas: Venda[], indicacoes: Indicacao[], metas:
           <p className="text-gray-600 text-[8px] font-bold mt-2 uppercase tracking-tight">APENAS PAGAMENTOS CONFIRMADOS</p>
         </div>
       </div>
-
       <div className="bg-[#111827] p-10 rounded-[2.5rem] border border-gray-800 shadow-2xl relative overflow-hidden">
         <h3 className="text-sm font-black uppercase text-white mb-10 flex items-center gap-3 tracking-widest">
           <i className="fas fa-chart-line text-purple-500"></i> PERFORMANCE CONSOLIDADA (VM SEGUROS)
@@ -131,20 +128,6 @@ const DashboardView: React.FC<{ vendas: Venda[], indicacoes: Indicacao[], metas:
             </div>
             <p className="text-[7px] font-black text-gray-700 uppercase">META: {FORMAT_BRL(metaRef.meta_salario)}</p>
           </div>
-          <div className="absolute right-0 bottom-0 opacity-10 pointer-events-none hidden lg:block">
-             <i className="fas fa-building text-8xl"></i>
-          </div>
-        </div>
-      </div>
-
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-10">
-        <div className="bg-[#111827] p-10 rounded-[2.5rem] border border-gray-800 shadow-xl">
-          <h3 className="text-[10px] font-black uppercase text-white mb-10 flex items-center gap-2 tracking-widest"><i className="fas fa-filter text-blue-500"></i> FUNIL DE PRODUÇÃO</h3>
-          <div className="space-y-8">{stats.funilVendas.map(f => (<div key={f.status} className="space-y-2"><div className="flex justify-between items-end"><span className="text-[8px] font-black text-gray-500 uppercase tracking-widest">{f.status}</span><span className="text-[10px] font-black text-white">{f.count} <span className="text-gray-600 ml-1">({f.pct}%)</span></span></div><div className="w-full bg-gray-900 h-1.5 rounded-full overflow-hidden"><div className="bg-blue-600 h-full transition-all duration-700" style={{ width: `${f.pct}%` }}></div></div></div>))}</div>
-        </div>
-        <div className="bg-[#111827] p-10 rounded-[2.5rem] border border-gray-800 shadow-xl">
-          <h3 className="text-[10px] font-black uppercase text-white mb-10 flex items-center gap-2 tracking-widest"><i className="fas fa-bolt text-yellow-500"></i> STATUS DOS LEADS</h3>
-          <div className="space-y-8">{stats.funilLeads.map(f => (<div key={f.status} className="space-y-2"><div className="flex justify-between items-end"><span className="text-[8px] font-black text-gray-500 uppercase tracking-widest">{f.status}</span><span className="text-[10px] font-black text-white">{f.count} <span className="text-gray-600 ml-1">({f.pct}%)</span></span></div><div className="w-full bg-gray-900 h-1.5 rounded-full overflow-hidden"><div className="bg-yellow-500 h-full transition-all duration-700" style={{ width: `${f.pct}%` }}></div></div></div>))}</div>
         </div>
       </div>
     </div>
@@ -156,7 +139,7 @@ const FinanceiroView: React.FC<{ vendas: Venda[], user: AuthUser | null, title?:
   const filtered = useMemo(() => {
     const uNome = (user?.nome || '').trim().toUpperCase();
     let list = (user?.isAdmin || user?.setor === 'RH') ? vendas : vendas.filter(v => (v.vendedor || '').trim().toUpperCase() === uNome);
-    list = list.filter(v => v.status === 'Pagamento Efetuado');
+    list = list.filter(v => v.status === 'Pagamento Efetuado' && v.origem !== 'RH');
     if (filterSuhai) list = list.filter(v => v.suhai);
     return list;
   }, [vendas, user, filterSuhai]);
@@ -279,6 +262,41 @@ const App: React.FC = () => {
 
   const uNome = (user?.nome || '').trim().toUpperCase();
 
+  const handleLiberarFolha = async (vendedorNome: string) => {
+    const target = usuarios.find(u => u.nome.toUpperCase() === vendedorNome.toUpperCase());
+    if (target) {
+        await cloud.salvarUsuario({ ...target, folhaLiberada: true });
+        alert(`Folha de ${vendedorNome} LIBERADA com sucesso!`);
+    }
+  };
+
+  const handleRetirarFolha = async (vendedorNome: string) => {
+    const target = usuarios.find(u => u.nome.toUpperCase() === vendedorNome.toUpperCase());
+    if (target) {
+        await cloud.salvarUsuario({ ...target, folhaLiberada: false });
+        alert(`Folha de ${vendedorNome} RETIRADA com sucesso!`);
+    }
+  };
+
+  const handleLimparTudo = async () => {
+    if (window.confirm("ATENÇÃO: Você está prestes a apagar TODAS as indicações, vendas e cancelamentos do sistema. Esta ação não pode ser desfeita. Deseja continuar?")) {
+      // Deletar Vendas
+      for (const v of vendas) {
+        if (v.id) await cloud.apagar('vendas', v.id);
+      }
+      // Deletar Indicações
+      for (const i of indicacoes) {
+        if (i.id) await cloud.apagar('indicacoes', i.id);
+      }
+      // Deletar Cancelamentos
+      for (const c of cancelamentos) {
+        if (c.id) await cloud.apagar('cancelamentos', c.id);
+      }
+      alert("Sistema limpo com sucesso! Todos os dados de produção foram removidos.");
+      setSelectedSellerRh(null);
+    }
+  };
+
   const handleLogin = () => {
     const uI = loginForm.username.trim().toLowerCase();
     const pI = loginForm.password.trim();
@@ -330,8 +348,11 @@ const App: React.FC = () => {
   const filteredVendas = vendas.filter(v => (user?.isAdmin || user?.setor === 'RH') ? (salesmanFilter === 'TODOS' || (v.vendedor || '').toUpperCase() === salesmanFilter.toUpperCase()) : (v.vendedor || '').toUpperCase() === uNome);
   const filteredIndicacoes = indicacoes.filter(i => (user?.isAdmin || user?.setor === 'RH') ? (salesmanFilter === 'TODOS' || (i.vendedor || '').toUpperCase() === salesmanFilter.toUpperCase()) : (i.vendedor || '').toUpperCase() === uNome);
 
+  // Sync folhaLiberada do estado global de usuários para o usuário logado
+  const currentUserData = user?.isAdmin ? user : (usuarios.find(u => u.id === user?.id) || user);
+
   return (
-    <Layout user={user!} onLogout={() => { setIsAuthenticated(false); setUser(null); }} activeSection={activeSection} setActiveSection={(s) => { setActiveSection(s); setSelectedSellerRh(null); setSelectedVendas([]); }}>
+    <Layout user={currentUserData as AuthUser} onLogout={() => { setIsAuthenticated(false); setUser(null); }} activeSection={activeSection} setActiveSection={(s) => { setActiveSection(s); setSelectedSellerRh(null); setSelectedVendas([]); }}>
       {activeSection === 'dashboard' && <DashboardView vendas={vendas} indicacoes={indicacoes} metas={metas} user={user} />}
       
       {activeSection === 'kanban-indicacoes' && (
@@ -386,6 +407,35 @@ const App: React.FC = () => {
       {activeSection === 'comissao' && <FinanceiroView vendas={vendas} user={user} />}
       {activeSection === 'cancelamentos' && <CancelamentosView cancelamentos={cancelamentos} user={user} onAdd={() => { setEditingItem({ cliente: '', empresa: '', vendedor: uNome, valor_comissao: 0 }); setModalType('cancelamento'); }} />}
       {activeSection === 'lead-suhai-page' && <FinanceiroView vendas={vendas} user={user} title="SUHAI GOLD - PAGOS" filterSuhai={true} />}
+
+      {/* Página de Pagamentos do Vendedor (Somente Leitura) */}
+      {activeSection === 'pagamento' && (
+        <div className="space-y-10 animate-in fade-in duration-500 max-w-[1600px] mx-auto px-4">
+            <h2 className="text-4xl font-black uppercase text-green-400 tracking-tighter">MINHA FOLHA DE PAGAMENTO</h2>
+            <div className="bg-[#111827] rounded-[2.5rem] border border-gray-800 overflow-hidden shadow-2xl">
+                <div className="overflow-x-auto"><table className="w-full text-left border-collapse"><thead className="bg-[#0b0f1a]/50 text-[9px] font-black uppercase text-gray-500 tracking-widest"><tr><th className="px-8 py-6">DATA</th><th className="px-8 py-6">CLIENTE</th><th className="px-8 py-6">SEGURADORA</th><th className="px-8 py-6">PRÊMIO</th><th className="px-8 py-6 text-green-500">COMISSÃO</th></tr></thead>
+                <tbody className="divide-y divide-gray-800/50">
+                    {vendas.filter(v => v.origem === 'RH' && (v.vendedor || '').toUpperCase() === uNome).map(v => (
+                    <tr key={v.id} className="hover:bg-white/5 transition-colors">
+                        <td className="px-8 py-5 text-gray-500 font-mono text-[10px]">{new Date(v.dataCriacao).toLocaleDateString('pt-BR')}</td>
+                        <td className="px-8 py-5 text-white font-black text-[10px] uppercase">{v.cliente}</td>
+                        <td className="px-8 py-5 text-gray-500 font-bold text-[9px] uppercase">{v.empresa}</td>
+                        <td className="px-8 py-5 text-white/80 font-mono text-[10px]">{FORMAT_BRL(v.valor)}</td>
+                        <td className="px-8 py-5 text-green-500 font-black font-mono text-[10px]">{FORMAT_BRL(v.comissao_vendedor)}</td>
+                    </tr>
+                    ))}
+                </tbody></table></div>
+            </div>
+            <div className="flex justify-center pt-10">
+                <div className="bg-[#111827] p-12 rounded-[3rem] border-2 border-green-500/30 shadow-2xl flex flex-col items-center">
+                <p className="text-gray-500 text-[9px] font-black uppercase mb-4 tracking-[0.4em]">VALOR TOTAL A RECEBER</p>
+                <h3 className="text-8xl font-black text-green-500 font-mono tracking-tighter">
+                    {FORMAT_BRL(vendas.filter(v => v.origem === 'RH' && (v.vendedor || '').toUpperCase() === uNome).reduce((a, b) => a + Number(b.comissao_vendedor || 0), 0))}
+                </h3>
+                </div>
+            </div>
+        </div>
+      )}
 
       {activeSection === 'cadastrar-indicacao' && (
         <div className="flex items-center justify-center min-h-[calc(100vh-120px)] animate-in zoom-in duration-500">
@@ -523,7 +573,11 @@ const App: React.FC = () => {
                     <h2 className="text-4xl font-black uppercase text-blue-400 tracking-tighter">VENDAS RH: {selectedSellerRh}</h2>
                   </div>
                   <div className="flex gap-4">
-                    <button className="bg-green-600 text-white px-6 py-3 rounded-lg font-black uppercase text-[10px] flex items-center gap-2 shadow-lg"><i className="fas fa-lock"></i> LIBERAR FOLHA</button>
+                    <button onClick={() => handleLiberarFolha(selectedSellerRh)} className="bg-green-600 text-white px-6 py-3 rounded-lg font-black uppercase text-[10px] flex items-center gap-2 shadow-lg"><i className="fas fa-lock"></i> LIBERAR FOLHA</button>
+                    <button onClick={() => handleRetirarFolha(selectedSellerRh)} className="bg-orange-600 text-white px-6 py-3 rounded-lg font-black uppercase text-[10px] flex items-center gap-2 shadow-lg"><i className="fas fa-lock-open"></i> RETIRAR FOLHA</button>
+                    {user?.isAdmin && (
+                      <button onClick={handleLimparTudo} className="bg-red-800 text-white px-6 py-3 rounded-lg font-black uppercase text-[10px] flex items-center gap-2 shadow-lg hover:bg-red-700 transition-all"><i className="fas fa-trash-alt"></i> LIMPAR TUDO</button>
+                    )}
                     <button onClick={() => window.print()} className="bg-blue-600 text-white px-6 py-3 rounded-lg font-black uppercase text-[10px] flex items-center gap-2 shadow-lg"><i className="fas fa-print"></i> IMPRIMIR LISTA</button>
                   </div>
                </div>
