@@ -87,7 +87,7 @@ const DashboardView: React.FC<{ vendas: Venda[], indicacoes: Indicacao[], metas:
         <div className="bg-[#111827] p-8 rounded-[1.5rem] border-l-2 border-l-[#10b981] shadow-xl relative overflow-hidden flex flex-col justify-center min-h-[160px]">
           <p className="text-gray-500 text-[10px] font-black uppercase mb-3 tracking-widest">PRÊMIO LÍQUIDO (HOJE)</p>
           <h3 className="text-[38px] font-black text-[#10b981] font-mono tracking-tighter">{FORMAT_BRL(stats.pHojeTotal)}</h3>
-          <p className="text-gray-600 text-[8px] font-bold mt-2 uppercase tracking-widest">TOTAL PRODUZIDO HOJE</p>
+          <p className="text-gray-700 text-[8px] font-bold mt-2 uppercase tracking-widest">TOTAL PRODUZIDO HOJE</p>
         </div>
         <div className="bg-[#111827] p-8 rounded-[1.5rem] shadow-xl relative overflow-hidden flex flex-col justify-center min-h-[160px]">
           <p className="text-gray-500 text-[10px] font-black uppercase mb-3 tracking-widest">VENDAS (NO MÊS)</p>
@@ -288,7 +288,50 @@ const App: React.FC = () => {
                   <h3 className="text-[11px] font-black uppercase text-gray-500 text-center mb-6 py-4 border-b border-gray-800/30 tracking-[0.2em]">{status}</h3>
                   <div className="flex-1 space-y-6 overflow-y-auto pr-2 scrollbar-thin">
                     {filteredVendas.filter(v => v.status === status).map(v => (
-                      <div key={v.id} className="bg-[#111827] rounded-[2.2rem] p-8 border border-gray-800/30 shadow-xl relative group transition-all hover:border-blue-500/20"><button onClick={() => { setEditingItem(v); setModalType('venda'); }} className="absolute top-8 right-8 text-gray-600 hover:text-white transition"><i className="fas fa-edit text-xs"></i></button><div className="space-y-6"><div><p className="text-[14px] font-black text-white uppercase tracking-tight">{v.cliente}</p><p className="text-[10px] font-bold text-blue-500 mt-1 uppercase">{v.tel} | {v.empresa || 'SEGURADORA'}</p><p className="text-[9px] font-bold text-gray-700 mt-1 uppercase">DATA: {new Date(v.dataCriacao).toLocaleDateString()}</p></div><div className="text-center bg-[#0b0f1a]/60 py-6 px-4 rounded-[1.8rem] border border-gray-800/50 shadow-inner"><p className="text-[9px] font-black text-gray-500 uppercase tracking-widest mb-1">PRÊMIO LÍQUIDO</p><h4 className="text-[28px] font-black text-white font-mono tracking-tighter">{FORMAT_BRL(v.valor)}</h4></div><div className="grid grid-cols-2 gap-4"><div className="bg-[#0b0f1a]/40 p-4 rounded-2xl border border-gray-800/30 text-center shadow-inner"><p className="text-[8px] font-black text-gray-600 uppercase mb-1">C. CHEIA</p><p className="text-[11px] font-black text-white font-mono">{FORMAT_BRL(v.comissao_cheia)}</p></div><div className="bg-[#0b0f1a]/40 p-4 rounded-2xl border border-gray-800/30 text-center shadow-inner"><p className="text-[8px] font-black text-gray-600 uppercase mb-1">SUA PARTE</p><p className="text-[11px] font-black text-green-500 font-mono">{FORMAT_BRL(v.comissao_vendedor)}</p></div></div><div className="flex justify-between items-center pt-5 border-t border-gray-800/50"><button onClick={() => moveVenda(v, 'left')} className="text-gray-600 hover:text-white transition"><i className="fas fa-chevron-left text-xs"></i></button><span className="text-[11px] font-black text-blue-500 uppercase tracking-widest">{v.vendedor}</span><button onClick={() => moveVenda(v, 'right')} className="text-gray-600 hover:text-white transition"><i className="fas fa-chevron-right text-xs"></i></button></div></div></div>
+                      <div key={v.id} className="bg-[#111827] rounded-[2.2rem] p-8 border border-gray-800/30 shadow-xl relative group transition-all hover:border-blue-500/20">
+                        {/* DELETAR & EDITAR */}
+                        <div className="absolute top-8 right-8 flex gap-4">
+                          <button 
+                            onClick={() => { if(window.confirm('Excluir venda?')) cloud.apagar('vendas', v.id!) }} 
+                            className="text-red-500 hover:scale-110 transition opacity-40 hover:opacity-100"
+                          >
+                            <i className="fas fa-trash-alt text-xs"></i>
+                          </button>
+                          <button onClick={() => { setEditingItem(v); setModalType('venda'); }} className="text-gray-600 hover:text-white transition">
+                            <i className="fas fa-edit text-xs"></i>
+                          </button>
+                        </div>
+                        <div className="space-y-6">
+                          <div>
+                            <p className="text-[14px] font-black text-white uppercase tracking-tight">{v.cliente}</p>
+                            <p className="text-[10px] font-bold text-blue-500 mt-1 uppercase">{v.tel} | {v.empresa || 'SEGURADORA'}</p>
+                            <p className="text-[9px] font-bold text-gray-700 mt-1 uppercase">DATA: {new Date(v.dataCriacao).toLocaleDateString()}</p>
+                          </div>
+                          <div className="text-center bg-[#0b0f1a]/60 py-6 px-4 rounded-[1.8rem] border border-gray-800/50 shadow-inner">
+                            <p className="text-[9px] font-black text-gray-500 uppercase tracking-widest mb-1">PRÊMIO LÍQUIDO</p>
+                            <h4 className="text-[28px] font-black text-white font-mono tracking-tighter">{FORMAT_BRL(v.valor)}</h4>
+                          </div>
+                          <div className="grid grid-cols-2 gap-4">
+                            <div className="bg-[#0b0f1a]/40 p-4 rounded-2xl border border-gray-800/30 text-center shadow-inner">
+                              <p className="text-[8px] font-black text-gray-600 uppercase mb-1">C. CHEIA</p>
+                              <p className="text-[11px] font-black text-white font-mono">{FORMAT_BRL(v.comissao_cheia)}</p>
+                            </div>
+                            <div className="bg-[#0b0f1a]/40 p-4 rounded-2xl border border-gray-800/30 text-center shadow-inner">
+                              <p className="text-[8px] font-black text-gray-600 uppercase mb-1">SUA PARTE</p>
+                              <p className="text-[11px] font-black text-green-500 font-mono">{FORMAT_BRL(v.comissao_vendedor)}</p>
+                            </div>
+                          </div>
+                          <div className="flex justify-between items-center pt-5 border-t border-gray-800/50">
+                            <button onClick={() => moveVenda(v, 'left')} className="text-gray-600 hover:text-white transition">
+                              <i className="fas fa-chevron-left text-xs"></i>
+                            </button>
+                            <span className="text-[11px] font-black text-blue-500 uppercase tracking-widest">{v.vendedor}</span>
+                            <button onClick={() => moveVenda(v, 'right')} className="text-gray-600 hover:text-white transition">
+                              <i className="fas fa-chevron-right text-xs"></i>
+                            </button>
+                          </div>
+                        </div>
+                      </div>
                     ))}
                   </div>
                 </div>
