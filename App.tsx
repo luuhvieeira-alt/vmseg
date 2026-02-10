@@ -170,8 +170,8 @@ const App: React.FC = () => {
   }, []);
 
   const handleLogin = () => {
-    const uI = loginForm.username.trim().toLowerCase();
-    const pI = loginForm.password.trim();
+    const uI = (loginForm.username || '').trim().toLowerCase();
+    const pI = (loginForm.password || '').trim();
     if (uI === 'admin' && pI === 'Realmadridfc123@') {
       setUser({ id: 'admin-id', nome: 'ADMIN MASTER', setor: 'ADMIN', isAdmin: true, login: 'admin', comissao: 100 });
       setIsAuthenticated(true);
@@ -205,10 +205,17 @@ const App: React.FC = () => {
   const filteredVendas = useMemo(() => {
     if (!currentUserData) return [];
     return vendas.filter(v => {
+      // 1. ISOLAMENTO TOTAL: Se a venda é do RH (emissão), ela NÃO aparece no Kanban de Produção
+      if (v.origem === 'RH') return false;
+
       const matchesSalesman = (currentUserData.setor === 'ADMIN' || currentUserData.setor === 'RH') 
         ? (salesmanFilter === 'TODOS' || (v.vendedor || '').toUpperCase() === salesmanFilter.toUpperCase()) 
         : (v.vendedor || '').toUpperCase() === (currentUserData.nome || '').toUpperCase();
-      const matchesSearch = (v.cliente || '').toUpperCase().includes(searchTerm.toUpperCase()) || (v.tel || '').includes(searchTerm);
+      
+      const cNome = (v.cliente || '').toUpperCase();
+      const sTerm = searchTerm.toUpperCase();
+      const matchesSearch = cNome.includes(sTerm) || (v.tel || '').includes(searchTerm);
+      
       return matchesSalesman && matchesSearch;
     });
   }, [vendas, currentUserData, salesmanFilter, searchTerm]);
@@ -219,7 +226,11 @@ const App: React.FC = () => {
       const matchesSalesman = (currentUserData.setor === 'ADMIN' || currentUserData.setor === 'RH') 
         ? (salesmanFilter === 'TODOS' || (i.vendedor || '').toUpperCase() === salesmanFilter.toUpperCase()) 
         : (i.vendedor || '').toUpperCase() === (currentUserData.nome || '').toUpperCase();
-      const matchesSearch = (i.cliente || '').toUpperCase().includes(searchTerm.toUpperCase()) || (i.tel || '').includes(searchTerm);
+      
+      const cNome = (i.cliente || '').toUpperCase();
+      const sTerm = searchTerm.toUpperCase();
+      const matchesSearch = cNome.includes(sTerm) || (i.tel || '').includes(searchTerm);
+      
       return matchesSalesman && matchesSearch;
     });
   }, [indicacoes, currentUserData, salesmanFilter, searchTerm]);
@@ -415,7 +426,7 @@ const App: React.FC = () => {
                 <thead className="bg-[#0b0f1a]/50 text-[10px] font-black uppercase text-gray-500 border-b border-gray-800/50">
                   <tr><th className="px-10 py-8">DATA</th><th className="px-10 py-8">CLIENTE</th><th className="px-10 py-8">SEGURADORA</th><th className="px-10 py-8">VENDEDOR</th><th className="px-10 py-8">VALOR ESTORNO</th></tr>
                 </thead>
-                <tbody className="divide-y divide-gray-800/50">
+                <tbody className="divide-y divide-gray-800/30">
                   {filteredCancelamentos.length === 0 ? (
                     <tr><td colSpan={5} className="px-10 py-12 text-center text-gray-600 font-black uppercase text-[10px] tracking-widest">Nenhum registro encontrado</td></tr>
                   ) : (
@@ -444,14 +455,14 @@ const App: React.FC = () => {
              <div className="bg-[#111827] w-full max-w-md p-8 rounded-[2rem] border border-gray-800 text-center shadow-2xl relative overflow-hidden group">
                 <p className="text-[10px] font-black text-gray-500 uppercase tracking-widest mb-3">TOTAL COMISSÕES REALIZADAS</p>
                 <h3 className="text-5xl font-black text-green-500 font-mono tracking-tighter">
-                  {FORMAT_BRL(vendas.filter(v => v.status === 'Pagamento Efetuado').reduce((acc, v) => acc + Number(v.comissao_vendedor || 0), 0))}
+                  {FORMAT_BRL(vendas.filter(v => v.origem !== 'RH' && v.status === 'Pagamento Efetuado').reduce((acc, v) => acc + Number(v.comissao_vendedor || 0), 0))}
                 </h3>
                 <div className="absolute inset-0 border-2 border-green-500/5 rounded-[2rem] pointer-events-none group-hover:border-green-500/20 transition-all duration-700"></div>
              </div>
            </div>
 
            <div id="financeiro-table" className="bg-[#111827] rounded-[2.5rem] border border-gray-800/50 overflow-hidden shadow-2xl">
-              <table className="w-full text-left"><thead className="bg-[#0b0f1a]/50 text-[10px] font-black uppercase text-gray-500 tracking-widest border-b border-gray-800/50"><tr><th className="px-10 py-8">DATA</th><th className="px-10 py-8">CLIENTE</th><th className="px-10 py-8">SEGURADORA</th><th className="px-10 py-8">VENDEDOR</th><th className="px-10 py-8">COMISSÃO</th></tr></thead><tbody className="divide-y divide-gray-800/50">{vendas.filter(v => v.status === 'Pagamento Efetuado').map(v => (<tr key={v.id} className="hover:bg-white/5 transition-colors group"><td className="px-10 py-6 text-gray-500 font-bold text-[11px]">{new Date(v.dataCriacao).toLocaleDateString('pt-BR')}</td><td className="px-10 py-6 text-white font-black text-[11px] uppercase tracking-tight">{v.cliente}</td><td className="px-10 py-6 text-gray-400 font-bold text-[10px] uppercase">{v.empresa || 'SUHAI SEGURADORA'}</td><td className="px-10 py-6 text-blue-500 font-black text-[11px] uppercase">{v.vendedor}</td><td className="px-10 py-6 text-green-500 font-black font-mono text-[11px]">{FORMAT_BRL(v.comissao_vendedor)}</td></tr>))}</tbody></table>
+              <table className="w-full text-left"><thead className="bg-[#0b0f1a]/50 text-[10px] font-black uppercase text-gray-500 tracking-widest border-b border-gray-800/50"><tr><th className="px-10 py-8">DATA</th><th className="px-10 py-8">CLIENTE</th><th className="px-10 py-8">SEGURADORA</th><th className="px-10 py-8">VENDEDOR</th><th className="px-10 py-8">COMISSÃO</th></tr></thead><tbody className="divide-y divide-gray-800/50">{vendas.filter(v => v.origem !== 'RH' && v.status === 'Pagamento Efetuado').map(v => (<tr key={v.id} className="hover:bg-white/5 transition-colors group"><td className="px-10 py-6 text-gray-500 font-bold text-[11px]">{new Date(v.dataCriacao).toLocaleDateString('pt-BR')}</td><td className="px-10 py-6 text-white font-black text-[11px] uppercase tracking-tight">{v.cliente}</td><td className="px-10 py-6 text-gray-400 font-bold text-[10px] uppercase">{v.empresa || 'SUHAI SEGURADORA'}</td><td className="px-10 py-6 text-blue-500 font-black text-[11px] uppercase">{v.vendedor}</td><td className="px-10 py-6 text-green-500 font-black font-mono text-[11px]">{FORMAT_BRL(v.comissao_vendedor)}</td></tr>))}</tbody></table>
            </div>
         </div>
       )}
@@ -477,8 +488,8 @@ const App: React.FC = () => {
                   <th className="px-10 py-8">COMISSÃO CHEIA</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-gray-800/50">
-                {vendas.filter(v => v.status === 'Falta Pagamento' || v.status === 'Mandar Boletos').map(v => (
+              <tbody className="divide-y divide-gray-800/30">
+                {vendas.filter(v => v.origem === 'RH' && (v.status === 'Falta Pagamento' || v.status === 'Mandar Boletos')).map(v => (
                   <tr key={v.id} className="hover:bg-white/5 transition-colors group">
                     <td className="px-10 py-6 text-white font-black text-[11px] uppercase tracking-tight">{v.cliente}</td>
                     <td className="px-10 py-6 text-gray-500 font-bold text-[11px]">{v.tel}</td>
@@ -487,7 +498,7 @@ const App: React.FC = () => {
                     <td className="px-10 py-6 text-white font-black font-mono text-[11px]">{FORMAT_BRL(v.comissao_cheia)}</td>
                   </tr>
                 ))}
-                {vendas.filter(v => v.status === 'Falta Pagamento' || v.status === 'Mandar Boletos').length === 0 && (
+                {vendas.filter(v => v.origem === 'RH' && (v.status === 'Falta Pagamento' || v.status === 'Mandar Boletos')).length === 0 && (
                   <tr>
                     <td colSpan={5} className="px-10 py-12 text-center text-gray-600 font-black uppercase text-[10px] tracking-widest">Nenhum registro de pagamento pendente</td>
                   </tr>
