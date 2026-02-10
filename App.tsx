@@ -193,13 +193,45 @@ const App: React.FC = () => {
     if (nextIdx >= 0 && nextIdx < INDICACAO_STATUS_MAP.length) await cloud.updateStatus('indicacoes', i.id!, INDICACAO_STATUS_MAP[nextIdx]);
   };
 
-  // Fix: Ensure currentUserData is always typed as AuthUser to prevent 'isAdmin' property access errors.
+  // --- HOOKS AT THE TOP (FIXING REACT ERROR #310) ---
+
   const currentUserData = useMemo(() => {
     if (!user) return null;
     const dbUser = usuarios.find(u => u.id === user.id);
     if (!dbUser) return user;
     return { ...dbUser, isAdmin: dbUser.setor === 'ADMIN' } as AuthUser;
   }, [user, usuarios]);
+
+  const filteredVendas = useMemo(() => {
+    if (!currentUserData) return [];
+    return vendas.filter(v => {
+      const matchesSalesman = (currentUserData.setor === 'ADMIN' || currentUserData.setor === 'RH') 
+        ? (salesmanFilter === 'TODOS' || (v.vendedor || '').toUpperCase() === salesmanFilter.toUpperCase()) 
+        : (v.vendedor || '').toUpperCase() === (currentUserData.nome || '').toUpperCase();
+      const matchesSearch = (v.cliente || '').toUpperCase().includes(searchTerm.toUpperCase()) || (v.tel || '').includes(searchTerm);
+      return matchesSalesman && matchesSearch;
+    });
+  }, [vendas, currentUserData, salesmanFilter, searchTerm]);
+
+  const filteredIndicacoes = useMemo(() => {
+    if (!currentUserData) return [];
+    return indicacoes.filter(i => {
+      const matchesSalesman = (currentUserData.setor === 'ADMIN' || currentUserData.setor === 'RH') 
+        ? (salesmanFilter === 'TODOS' || (i.vendedor || '').toUpperCase() === salesmanFilter.toUpperCase()) 
+        : (i.vendedor || '').toUpperCase() === (currentUserData.nome || '').toUpperCase();
+      const matchesSearch = (i.cliente || '').toUpperCase().includes(searchTerm.toUpperCase()) || (i.tel || '').includes(searchTerm);
+      return matchesSalesman && matchesSearch;
+    });
+  }, [indicacoes, currentUserData, salesmanFilter, searchTerm]);
+
+  const filteredCancelamentos = useMemo(() => {
+    if (!currentUserData) return [];
+    if (currentUserData.setor === 'ADMIN' || currentUserData.setor === 'RH') return cancelamentos;
+    const uNome = (currentUserData.nome || '').trim().toUpperCase();
+    return cancelamentos.filter(c => (c.vendedor || '').trim().toUpperCase() === uNome);
+  }, [cancelamentos, currentUserData]);
+
+  // --- CONDITIONAL RETURNS ---
 
   if (!isAuthenticated || !currentUserData) return (
     <div className="min-h-screen bg-[#0b0f1a] flex flex-col items-center justify-center p-6 text-center">
@@ -214,22 +246,10 @@ const App: React.FC = () => {
     </div>
   );
 
-  const filteredVendas = vendas.filter(v => {
-    const matchesSalesman = (currentUserData.setor === 'ADMIN' || currentUserData.setor === 'RH') ? (salesmanFilter === 'TODOS' || (v.vendedor || '').toUpperCase() === salesmanFilter.toUpperCase()) : (v.vendedor || '').toUpperCase() === (currentUserData.nome || '').toUpperCase();
-    const matchesSearch = (v.cliente || '').toUpperCase().includes(searchTerm.toUpperCase()) || (v.tel || '').includes(searchTerm);
-    return matchesSalesman && matchesSearch;
-  });
-
-  const filteredIndicacoes = indicacoes.filter(i => {
-    const matchesSalesman = (currentUserData.setor === 'ADMIN' || currentUserData.setor === 'RH') ? (salesmanFilter === 'TODOS' || (i.vendedor || '').toUpperCase() === salesmanFilter.toUpperCase()) : (i.vendedor || '').toUpperCase() === (currentUserData.nome || '').toUpperCase();
-    const matchesSearch = (i.cliente || '').toUpperCase().includes(searchTerm.toUpperCase()) || (i.tel || '').includes(searchTerm);
-    return matchesSalesman && matchesSearch;
-  });
-
   return (
-    <Layout user={currentUserData as AuthUser} onLogout={() => { setIsAuthenticated(false); setUser(null); }} activeSection={activeSection} setActiveSection={(s) => { setActiveSection(s); setSelectedSellerRh(null); }}>
+    <Layout user={currentUserData} onLogout={() => { setIsAuthenticated(false); setUser(null); }} activeSection={activeSection} setActiveSection={(s) => { setActiveSection(s); setSelectedSellerRh(null); }}>
       
-      {activeSection === 'dashboard' && <DashboardView vendas={vendas} indicacoes={indicacoes} metas={metas} user={currentUserData as AuthUser} />}
+      {activeSection === 'dashboard' && <DashboardView vendas={vendas} indicacoes={indicacoes} metas={metas} user={currentUserData} />}
       
       {/* PAGINA INDICAÇÕES */}
       {activeSection === 'kanban-indicacoes' && (
@@ -390,7 +410,28 @@ const App: React.FC = () => {
       {activeSection === 'cancelamentos' && (
         <div className="space-y-10 animate-in fade-in duration-500 max-w-full px-10">
            <div className="flex justify-between items-center"><h2 className="text-[38px] font-black uppercase text-red-500 tracking-tight">CANCELAMENTOS</h2><button onClick={() => { setEditingItem({ dataCriacao: Date.now(), valor_comissao: 0 }); setModalType('cancelamento'); }} className="bg-red-500 text-white px-8 py-4 rounded-xl font-black text-[10px] uppercase shadow-lg hover:scale-105 transition-all">NOVO CANCELAMENTO</button></div>
-           <div id="financeiro-table" className="bg-[#111827] rounded-[2.5rem] border border-gray-800/50 overflow-hidden shadow-2xl"><table className="w-full text-left"><thead className="bg-[#0b0f1a]/50 text-[10px] font-black uppercase text-gray-500 border-b border-gray-800/50"><tr><th className="px-10 py-8">DATA</th><th className="px-10 py-8">CLIENTE</th><th className="px-10 py-8">SEGURADORA</th><th className="px-10 py-8">VENDEDOR</th><th className="px-10 py-8">VALOR ESTORNO</th></tr></thead><tbody className="divide-y divide-gray-800/50">{(cancelamentos || []).length === 0 ? (<tr><td colSpan={5} className="px-10 py-12 text-center text-gray-600 font-black uppercase text-[10px] tracking-widest">Nenhum registro encontrado</td></tr>) : (cancelamentos.map((c, idx) => (<tr key={c.id || idx} className="hover:bg-white/5 transition-colors group"><td className="px-10 py-6 text-gray-500 font-bold text-[11px]">{c.dataCriacao ? new Date(c.dataCriacao).toLocaleDateString('pt-BR') : '---'}</td><td className="px-10 py-6 text-white font-black text-[11px] uppercase tracking-tight">{c.cliente}</td><td className="px-10 py-6 text-gray-400 font-bold text-[10px] uppercase">{c.empresa || 'SEGURADORA'}</td><td className="px-10 py-6 text-blue-500 font-black text-[11px] uppercase">{c.vendedor}</td><td className="px-10 py-6 text-red-500 font-black font-mono text-[11px]">{FORMAT_BRL(c.valor_comissao)}</td></tr>)))}</tbody></table></div>
+           <div id="financeiro-table" className="bg-[#111827] rounded-[2.5rem] border border-gray-800/50 overflow-hidden shadow-2xl">
+              <table className="w-full text-left">
+                <thead className="bg-[#0b0f1a]/50 text-[10px] font-black uppercase text-gray-500 border-b border-gray-800/50">
+                  <tr><th className="px-10 py-8">DATA</th><th className="px-10 py-8">CLIENTE</th><th className="px-10 py-8">SEGURADORA</th><th className="px-10 py-8">VENDEDOR</th><th className="px-10 py-8">VALOR ESTORNO</th></tr>
+                </thead>
+                <tbody className="divide-y divide-gray-800/50">
+                  {filteredCancelamentos.length === 0 ? (
+                    <tr><td colSpan={5} className="px-10 py-12 text-center text-gray-600 font-black uppercase text-[10px] tracking-widest">Nenhum registro encontrado</td></tr>
+                  ) : (
+                    filteredCancelamentos.map((c, idx) => (
+                      <tr key={c.id || idx} className="hover:bg-white/5 transition-colors group">
+                        <td className="px-10 py-6 text-gray-500 font-bold text-[11px]">{c.dataCriacao ? new Date(c.dataCriacao).toLocaleDateString('pt-BR') : '---'}</td>
+                        <td className="px-10 py-6 text-white font-black text-[11px] uppercase tracking-tight">{c.cliente}</td>
+                        <td className="px-10 py-6 text-gray-400 font-bold text-[10px] uppercase">{c.empresa || 'SEGURADORA'}</td>
+                        <td className="px-10 py-6 text-blue-500 font-black text-[11px] uppercase">{c.vendedor}</td>
+                        <td className="px-10 py-6 text-red-500 font-black font-mono text-[11px]">{FORMAT_BRL(c.valor_comissao)}</td>
+                      </tr>
+                    ))
+                  )}
+                </tbody>
+              </table>
+           </div>
         </div>
       )}
 
@@ -562,108 +603,51 @@ const App: React.FC = () => {
         </div>
       )}
 
-      {/* --- OUTRAS PÁGINAS --- */}
-
-      {/* DISTRIBUIR LEADS - RÉPLICA DO PRINT 2 */}
+      {/* DISTRIBUIR LEADS */}
       {activeSection === 'cadastrar-indicacao' && currentUserData.setor === 'ADMIN' && (
         <div className="flex items-center justify-center min-h-[calc(100vh-120px)] animate-in fade-in duration-500">
            <div className="bg-[#111827] w-full max-w-xl rounded-[2.5rem] p-12 border border-gray-800 shadow-2xl relative">
               <h2 className="text-[24px] font-black text-yellow-500 uppercase text-center mb-12 tracking-[0.2em]">DISTRIBUIR LEAD</h2>
               <div className="space-y-8">
-                <div className="space-y-3">
-                  <label className="text-[8px] font-black uppercase text-gray-600 ml-4 tracking-widest">CLIENTE</label>
-                  <input className="w-full bg-[#0b0f1a] border border-gray-800 p-6 rounded-2xl text-white outline-none font-black uppercase text-sm focus:border-yellow-500/30 transition-all shadow-inner" value={editingItem?.cliente || ''} onChange={e => setEditingItem({...editingItem, cliente: e.target.value.toUpperCase()})} />
-                </div>
-                
+                <div className="space-y-3"><label className="text-[8px] font-black uppercase text-gray-600 ml-4 tracking-widest">CLIENTE</label><input className="w-full bg-[#0b0f1a] border border-gray-800 p-6 rounded-2xl text-white outline-none font-black uppercase text-sm focus:border-yellow-500/30 transition-all shadow-inner" value={editingItem?.cliente || ''} onChange={e => setEditingItem({...editingItem, cliente: e.target.value.toUpperCase()})} /></div>
                 <div className="grid grid-cols-2 gap-8">
-                  <div className="space-y-3">
-                    <label className="text-[8px] font-black uppercase text-gray-600 ml-4 tracking-widest">WHATSAPP</label>
-                    <input className="w-full bg-[#0b0f1a] border border-gray-800 p-6 rounded-2xl text-white outline-none text-sm font-bold shadow-inner" placeholder="(00) 00000-0000" value={editingItem?.tel || ''} onChange={e => setEditingItem({...editingItem, tel: e.target.value})} />
-                  </div>
-                  <div className="space-y-3">
-                    <label className="text-[8px] font-black uppercase text-gray-600 ml-4 tracking-widest">VEÍCULO / MODELO</label>
-                    <input className="w-full bg-[#0b0f1a] border border-gray-800 p-6 rounded-2xl text-white outline-none text-sm font-bold uppercase shadow-inner" placeholder="MOTO, CARRO, ETC" value={editingItem?.veiculo || ''} onChange={e => setEditingItem({...editingItem, veiculo: e.target.value.toUpperCase()})} />
-                  </div>
+                  <div className="space-y-3"><label className="text-[8px] font-black uppercase text-gray-600 ml-4 tracking-widest">WHATSAPP</label><input className="w-full bg-[#0b0f1a] border border-gray-800 p-6 rounded-2xl text-white outline-none text-sm font-bold shadow-inner" placeholder="(00) 00000-0000" value={editingItem?.tel || ''} onChange={e => setEditingItem({...editingItem, tel: e.target.value})} /></div>
+                  <div className="space-y-3"><label className="text-[8px] font-black uppercase text-gray-600 ml-4 tracking-widest">VEÍCULO / MODELO</label><input className="w-full bg-[#0b0f1a] border border-gray-800 p-6 rounded-2xl text-white outline-none text-sm font-bold uppercase shadow-inner" placeholder="MOTO, CARRO, ETC" value={editingItem?.veiculo || ''} onChange={e => setEditingItem({...editingItem, veiculo: e.target.value.toUpperCase()})} /></div>
                 </div>
-
-                <div className="space-y-3">
-                  <label className="text-[8px] font-black uppercase text-gray-600 ml-4 tracking-widest">ATRIBUIR AO VENDEDOR</label>
-                  <div className="relative">
-                    <select className="w-full bg-[#0b0f1a] border border-gray-800 p-6 rounded-2xl text-white outline-none font-black uppercase text-sm cursor-pointer shadow-inner appearance-none" value={editingItem?.vendedor || ''} onChange={e => setEditingItem({...editingItem, vendedor: e.target.value})}>
-                      <option value="">SELECIONE UM VENDEDOR</option>
-                      {usuarios.filter(u => u.setor === 'VENDEDOR').map(u => <option key={u.id} value={u.nome}>{u.nome.toUpperCase()}</option>)}
-                    </select>
-                    <i className="fas fa-chevron-down absolute right-6 top-1/2 -translate-y-1/2 text-gray-600 pointer-events-none"></i>
-                  </div>
-                </div>
-
-                <div className="bg-[#0b0f1a] border border-gray-800 p-5 rounded-2xl flex items-center gap-4 cursor-pointer hover:bg-white/5 transition" onClick={() => setEditingItem({...editingItem, suhai: !editingItem?.suhai})}>
-                  <div className={`w-5 h-5 rounded border-2 flex items-center justify-center transition-all ${editingItem?.suhai ? 'bg-green-500 border-green-500' : 'border-gray-700'}`}>
-                    {editingItem?.suhai && <i className="fas fa-check text-white text-[10px]"></i>}
-                  </div>
-                  <span className="text-[8px] font-black uppercase text-green-500 tracking-widest">MARCAR COMO LEAD SUHAI</span>
-                </div>
-
-                <div className="space-y-3">
-                  <label className="text-[8px] font-black uppercase text-gray-600 ml-4 tracking-widest">OBSERVAÇÕES ADICIONAIS</label>
-                  <textarea className="w-full bg-[#0b0f1a] border border-gray-800 p-6 rounded-2xl text-white outline-none text-xs font-bold shadow-inner min-h-[120px]" placeholder="EX: CLIENTE INDICADO POR AMIGO..." value={editingItem?.info || ''} onChange={e => setEditingItem({...editingItem, info: e.target.value})}></textarea>
-                </div>
-
+                <div className="space-y-3"><label className="text-[8px] font-black uppercase text-gray-600 ml-4 tracking-widest">ATRIBUIR AO VENDEDOR</label><div className="relative"><select className="w-full bg-[#0b0f1a] border border-gray-800 p-6 rounded-2xl text-white outline-none font-black uppercase text-sm cursor-pointer shadow-inner appearance-none" value={editingItem?.vendedor || ''} onChange={e => setEditingItem({...editingItem, vendedor: e.target.value})}><option value="">SELECIONE UM VENDEDOR</option>{usuarios.filter(u => u.setor === 'VENDEDOR').map(u => <option key={u.id} value={u.nome}>{u.nome.toUpperCase()}</option>)}</select><i className="fas fa-chevron-down absolute right-6 top-1/2 -translate-y-1/2 text-gray-600 pointer-events-none"></i></div></div>
+                <div className="bg-[#0b0f1a] border border-gray-800 p-5 rounded-2xl flex items-center gap-4 cursor-pointer hover:bg-white/5 transition" onClick={() => setEditingItem({...editingItem, suhai: !editingItem?.suhai})}><div className={`w-5 h-5 rounded border-2 flex items-center justify-center transition-all ${editingItem?.suhai ? 'bg-green-500 border-green-500' : 'border-gray-700'}`}>{editingItem?.suhai && <i className="fas fa-check text-white text-[10px]"></i>}</div><span className="text-[8px] font-black uppercase text-green-500 tracking-widest">MARCAR COMO LEAD SUHAI</span></div>
+                <div className="space-y-3"><label className="text-[8px] font-black uppercase text-gray-600 ml-4 tracking-widest">OBSERVAÇÕES ADICIONAIS</label><textarea className="w-full bg-[#0b0f1a] border border-gray-800 p-6 rounded-2xl text-white outline-none text-xs font-bold shadow-inner min-h-[120px]" placeholder="EX: CLIENTE INDICADO POR AMIGO..." value={editingItem?.info || ''} onChange={e => setEditingItem({...editingItem, info: e.target.value})}></textarea></div>
                 <button onClick={async () => { if(!editingItem?.cliente || !editingItem?.vendedor) return alert('PREENCHA PELO MENOS NOME E VENDEDOR'); await cloud.salvarIndicacao({...editingItem, status: 'NOVA INDICAÇÃO', dataCriacao: Date.now()}); alert("LEAD DISTRIBUÍDO COM SUCESSO!"); setEditingItem({}); }} className="w-full bg-[#ffcc00] p-6 rounded-[1.2rem] font-black uppercase text-black text-[12px] shadow-2xl hover:bg-yellow-400 transition-all mt-6">CONFIRMAR ENVIO DO LEAD</button>
               </div>
            </div>
         </div>
       )}
 
-      {/* PERFORMANCE - RÉPLICA DO PRINT 1 */}
+      {/* PERFORMANCE */}
       {activeSection === 'performance' && (
         <div className="space-y-16 animate-in fade-in duration-500 max-w-[1600px] mx-auto px-4 pb-20">
           <h2 className="text-[34px] font-black text-purple-500 uppercase tracking-tighter">PERFORMANCE TEAM</h2>
-          
           <div className="bg-[#111827]/40 p-10 rounded-[2.5rem] border border-gray-800/30 shadow-2xl">
-            <h3 className="text-[10px] font-black text-gray-500 uppercase tracking-widest mb-10 flex items-center gap-2">
-              <i className="fas fa-bookmark text-purple-500"></i> PRODUÇÃO GLOBAL POR SEGURADORA (MÊS)
-            </h3>
+            <h3 className="text-[10px] font-black text-gray-500 uppercase tracking-widest mb-10 flex items-center gap-2"><i className="fas fa-bookmark text-purple-500"></i> PRODUÇÃO GLOBAL POR SEGURADORA (MÊS)</h3>
             <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-7 gap-4">
               {['ALLIANZ', 'BRADESCO', 'HDI', 'ITURAN', 'PORTO SEGURO', 'SUHAI SEGURADORA', 'TOKIO MARINE'].map(name => {
                 const count = vendas.filter(v => (v.empresa || '').toUpperCase() === name && new Date(v.dataCriacao).getMonth() === new Date().getMonth()).length;
                 return (
-                  <div key={name} className="bg-[#0b0f1a] p-8 rounded-2xl border border-gray-800/40 flex flex-col items-center justify-center text-center group hover:border-purple-500/20 transition-all">
-                    <p className="text-[7px] font-black text-gray-600 uppercase tracking-widest mb-3">{name}</p>
-                    <h4 className="text-[42px] font-black text-white leading-none">{count}</h4>
-                    <p className="text-[7px] font-black text-purple-500 uppercase tracking-[0.2em] mt-2">APÓLICES</p>
-                  </div>
+                  <div key={name} className="bg-[#0b0f1a] p-8 rounded-2xl border border-gray-800/40 flex flex-col items-center justify-center text-center group hover:border-purple-500/20 transition-all"><p className="text-[7px] font-black text-gray-600 uppercase tracking-widest mb-3">{name}</p><h4 className="text-[42px] font-black text-white leading-none">{count}</h4><p className="text-[7px] font-black text-purple-500 uppercase tracking-[0.2em] mt-2">APÓLICES</p></div>
                 );
               })}
             </div>
           </div>
-
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-10">
             {usuarios.filter(u => u.setor === 'VENDEDOR').map(v => {
               const uVendas = vendas.filter(vend => vend.vendedor === v.nome && new Date(vend.dataCriacao).getMonth() === new Date().getMonth());
               const tPremio = uVendas.reduce((acc, curr) => acc + Number(curr.valor || 0), 0);
               const tComissao = uVendas.reduce((acc, curr) => acc + Number(curr.comissao_vendedor || 0), 0);
-              
               return (
                 <div key={v.id} className="bg-[#111827] rounded-[2.5rem] p-10 border border-gray-800/30 shadow-2xl relative flex flex-col items-center text-center">
                    <h3 className="text-[32px] font-black text-white uppercase tracking-tight mb-12">{v.nome}</h3>
-                   
-                   <div className="bg-[#0b0f1a] w-full p-8 rounded-[2rem] border border-gray-800/50 mb-12 flex flex-col items-center shadow-inner">
-                      <p className="text-[9px] font-black text-gray-500 uppercase tracking-widest mb-2">PRODUÇÃO REAL (MÊS)</p>
-                      <h4 className="text-[100px] font-black text-purple-500 leading-none font-mono">{uVendas.length}</h4>
-                   </div>
-
-                   <div className="w-full space-y-4 text-left">
-                      <p className="text-[9px] font-black text-gray-600 uppercase tracking-widest border-b border-gray-800/50 pb-2 mb-4">PRÊMIO E COMISSÃO</p>
-                      <div className="flex justify-between items-center">
-                        <span className="text-[10px] font-black text-gray-500 uppercase">TOTAL PRÊMIO</span>
-                        <span className="text-[12px] font-black text-white font-mono">{FORMAT_BRL(tPremio)}</span>
-                      </div>
-                      <div className="flex justify-between items-center">
-                        <span className="text-[10px] font-black text-gray-500 uppercase">TOTAL COMISSÃO</span>
-                        <span className="text-[12px] font-black text-green-500 font-mono">{FORMAT_BRL(tComissao)}</span>
-                      </div>
-                   </div>
+                   <div className="bg-[#0b0f1a] w-full p-8 rounded-[2rem] border border-gray-800/50 mb-12 flex flex-col items-center shadow-inner"><p className="text-[9px] font-black text-gray-500 uppercase tracking-widest mb-2">PRODUÇÃO REAL (MÊS)</p><h4 className="text-[100px] font-black text-purple-500 leading-none font-mono">{uVendas.length}</h4></div>
+                   <div className="w-full space-y-4 text-left"><p className="text-[9px] font-black text-gray-600 uppercase tracking-widest border-b border-gray-800/50 pb-2 mb-4">PRÊMIO E COMISSÃO</p><div className="flex justify-between items-center"><span className="text-[10px] font-black text-gray-500 uppercase">TOTAL PRÊMIO</span><span className="text-[12px] font-black text-white font-mono">{FORMAT_BRL(tPremio)}</span></div><div className="flex justify-between items-center"><span className="text-[10px] font-black text-gray-500 uppercase">TOTAL COMISSÃO</span><span className="text-[12px] font-black text-green-500 font-mono">{FORMAT_BRL(tComissao)}</span></div></div>
                 </div>
               );
             })}
@@ -671,28 +655,22 @@ const App: React.FC = () => {
         </div>
       )}
 
-      {/* CONFIGURAÇÕES - DEFINITIVA */}
+      {/* CONFIGURAÇÕES */}
       {activeSection === 'configuracoes' && currentUserData.setor === 'ADMIN' && (
         <div className="space-y-10 max-w-[1200px] mx-auto animate-in fade-in duration-500 px-4">
-           <div className="flex justify-between items-center">
-              <h2 className="text-[34px] font-black text-gray-400 uppercase tracking-tighter">CONFIGURAÇÕES</h2>
-              <button onClick={() => { setEditingItem({}); setModalType('empresa'); }} className="bg-gray-700 text-white px-8 py-4 rounded-xl font-black uppercase text-[10px] shadow-lg hover:bg-gray-600 transition-all">NOVA SEGURADORA</button>
-           </div>
+           <div className="flex justify-between items-center"><h2 className="text-[34px] font-black text-gray-400 uppercase tracking-tighter">CONFIGURAÇÕES</h2><button onClick={() => { setEditingItem({}); setModalType('empresa'); }} className="bg-gray-700 text-white px-8 py-4 rounded-xl font-black uppercase text-[10px] shadow-lg hover:bg-gray-600 transition-all">NOVA SEGURADORA</button></div>
            <div className="bg-[#111827] rounded-[2.5rem] border border-gray-800/50 overflow-hidden shadow-2xl">
               <div className="p-8 border-b border-gray-800/50"><h3 className="text-[11px] font-black text-gray-500 uppercase tracking-widest">GERENCIAR SEGURADORAS</h3></div>
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 p-8">
                  {empresas.map(emp => (
-                   <div key={emp.id} className="bg-[#0b0f1a] p-6 rounded-2xl border border-gray-800/50 flex justify-between items-center group">
-                      <span className="font-black text-white uppercase text-sm tracking-tight">{emp.nome}</span>
-                      <button onClick={() => cloud.apagar('empresas', emp.id!)} className="text-red-900 opacity-0 group-hover:opacity-100 hover:text-red-500 transition-all"><i className="fas fa-trash-alt"></i></button>
-                   </div>
+                   <div key={emp.id} className="bg-[#0b0f1a] p-6 rounded-2xl border border-gray-800/50 flex justify-between items-center group"><span className="font-black text-white uppercase text-sm tracking-tight">{emp.nome}</span><button onClick={() => cloud.apagar('empresas', emp.id!)} className="text-red-900 opacity-0 group-hover:opacity-100 hover:text-red-500 transition-all"><i className="fas fa-trash-alt"></i></button></div>
                  ))}
               </div>
            </div>
         </div>
       )}
 
-      {/* VENDEDORES - RESTAURADA */}
+      {/* VENDEDORES */}
       {activeSection === 'vendedores' && currentUserData.setor === 'ADMIN' && (
         <div className="space-y-10 max-w-[1600px] mx-auto animate-in fade-in duration-500 px-4">
            <div className="flex justify-between items-center"><h2 className="text-[34px] font-black text-red-500 tracking-tighter uppercase">GESTÃO DE EQUIPE</h2><button onClick={() => { setEditingItem({ setor: 'VENDEDOR', comissao: 0 }); setModalType('usuario'); }} className="bg-red-600 text-white px-8 py-4 rounded-xl font-black uppercase text-[10px] shadow-lg hover:scale-105 transition-all">CADASTRAR NOVO USUÁRIO</button></div>
@@ -708,7 +686,7 @@ const App: React.FC = () => {
         </div>
       )}
 
-      {/* METAS - RESTAURADA */}
+      {/* METAS */}
       {activeSection === 'metas' && currentUserData.setor === 'ADMIN' && (
         <div className="space-y-10 max-w-[1600px] mx-auto animate-in fade-in duration-500 px-4">
            <div className="flex justify-between items-center"><h2 className="text-[34px] font-black text-blue-500 uppercase tracking-tighter">DEFINIÇÃO DE METAS</h2><button onClick={() => { setEditingItem({ meta_qtd: 0, meta_premio: 0, meta_salario: 0 }); setModalType('meta'); }} className="bg-blue-600 text-white px-8 py-4 rounded-xl font-black uppercase text-[10px] shadow-lg hover:scale-105 transition-all">NOVA META</button></div>
@@ -766,10 +744,7 @@ const App: React.FC = () => {
                 <div className="grid grid-cols-2 gap-4"><div className="space-y-1"><label className="text-[9px] font-black uppercase text-gray-500 ml-2 tracking-widest">TELEFONE</label><input className="w-full bg-[#0b0f1a] border border-gray-800 p-5 rounded-xl text-white outline-none text-xs font-bold shadow-inner" value={editingItem?.tel || ''} onChange={e => setEditingItem({...editingItem, tel: e.target.value})} /></div><div className="space-y-1"><label className="text-[9px] font-black uppercase text-gray-500 ml-2 tracking-widest">VEÍCULO</label><input className="w-full bg-[#0b0f1a] border border-gray-800 p-5 rounded-xl text-white outline-none text-xs font-bold uppercase shadow-inner" value={editingItem?.veiculo || ''} onChange={e => setEditingItem({...editingItem, veiculo: e.target.value.toUpperCase()})} /></div></div>
                 <div className="space-y-1"><label className="text-[9px] font-black uppercase text-gray-500 ml-2 tracking-widest">VENDEDOR</label><select className="w-full bg-[#0b0f1a] border border-gray-800 p-5 rounded-xl text-white outline-none text-xs uppercase font-black shadow-inner" value={editingItem?.vendedor || ''} onChange={e => setEditingItem({...editingItem, vendedor: e.target.value})}><option value="">SELECIONE VENDEDOR</option>{usuarios.filter(u => u.setor === 'VENDEDOR').map(u => <option key={u.id} value={u.nome}>{u.nome.toUpperCase()}</option>)}</select></div>
                 <div className="space-y-1"><label className="text-[9px] font-black uppercase text-gray-500 ml-2 tracking-widest">OBSERVAÇÕES</label><textarea className="w-full bg-[#0b0f1a] border border-gray-800 p-5 rounded-xl text-white outline-none text-xs font-bold shadow-inner min-h-[100px]" value={editingItem?.info || ''} onChange={e => setEditingItem({...editingItem, info: e.target.value})}></textarea></div>
-                <div className="flex items-center gap-4 cursor-pointer" onClick={() => setEditingItem({...editingItem, suhai: !editingItem?.suhai})}>
-                   <div className={`w-5 h-5 rounded border-2 flex items-center justify-center transition-all ${editingItem?.suhai ? 'bg-green-500 border-green-500' : 'border-gray-700'}`}>{editingItem?.suhai && <i className="fas fa-check text-white text-[10px]"></i>}</div>
-                   <span className="text-[9px] font-black uppercase text-green-500 tracking-widest">MARCAR COMO LEAD SUHAI</span>
-                </div>
+                <div className="flex items-center gap-4 cursor-pointer" onClick={() => setEditingItem({...editingItem, suhai: !editingItem?.suhai})}><div className={`w-5 h-5 rounded border-2 flex items-center justify-center transition-all ${editingItem?.suhai ? 'bg-green-500 border-green-500' : 'border-gray-700'}`}>{editingItem?.suhai && <i className="fas fa-check text-white text-[10px]"></i>}</div><span className="text-[9px] font-black uppercase text-green-500 tracking-widest">MARCAR COMO LEAD SUHAI</span></div>
               </div>
             )}
             {modalType === 'venda' && (
