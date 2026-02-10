@@ -33,17 +33,20 @@ const ModalWrapper: React.FC<{
   </div>
 );
 
-// --- VIEW DASHBOARD ---
+// --- VIEW DASHBOARD (RÉPLICA 100%) ---
 const DashboardView: React.FC<{ vendas: Venda[], indicacoes: Indicacao[], metas: Meta[], user: AuthUser | null }> = ({ vendas, indicacoes, metas, user }) => {
   const stats = useMemo(() => {
     const now = new Date();
     const startOfDay = new Date(); startOfDay.setHours(0, 0, 0, 0);
     const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1).getTime();
     const uNome = (user?.nome || '').trim().toUpperCase();
-    const baseVendas = (user?.isAdmin || user?.setor === 'RH') ? vendas : vendas.filter(v => (v.vendedor || '').trim().toUpperCase() === uNome);
     
-    const hojeVendas = baseVendas.filter(v => v.dataCriacao >= startOfDay.getTime());
-    const mesVendasTotal = baseVendas.filter(v => v.dataCriacao >= startOfMonth);
+    // Filtro base: Vendas que NÃO são do RH para o Dashboard
+    const baseVendas = (user?.isAdmin || user?.setor === 'RH') ? vendas : vendas.filter(v => (v.vendedor || '').trim().toUpperCase() === uNome);
+    const dashboardVendas = baseVendas.filter(v => v.origem !== 'RH');
+    
+    const hojeVendas = dashboardVendas.filter(v => v.dataCriacao >= startOfDay.getTime());
+    const mesVendasTotal = dashboardVendas.filter(v => v.dataCriacao >= startOfMonth);
     const mesVendasPagas = mesVendasTotal.filter(v => v.status === 'Pagamento Efetuado');
     
     const vHojeCount = hojeVendas.length;
@@ -149,29 +152,26 @@ const DashboardView: React.FC<{ vendas: Venda[], indicacoes: Indicacao[], metas:
 };
 
 // --- VIEW FINANCEIRO ---
-const FinanceiroView: React.FC<{ 
-  vendas: Venda[], 
-  user: AuthUser | null, 
-  title?: string, 
-  filterSuhai?: boolean 
-}> = ({ vendas, user, title, filterSuhai }) => {
-  const uNome = (user?.nome || '').trim().toUpperCase();
+const FinanceiroView: React.FC<{ vendas: Venda[], user: AuthUser | null, title?: string, filterSuhai?: boolean }> = ({ vendas, user, title, filterSuhai }) => {
   const filtered = useMemo(() => {
+    const uNome = (user?.nome || '').trim().toUpperCase();
     let list = (user?.isAdmin || user?.setor === 'RH') ? vendas : vendas.filter(v => (v.vendedor || '').trim().toUpperCase() === uNome);
+    list = list.filter(v => v.status === 'Pagamento Efetuado');
     if (filterSuhai) list = list.filter(v => v.suhai);
-    return list.filter(v => v.status === 'Pagamento Efetuado');
+    return list;
   }, [vendas, user, filterSuhai]);
 
   const totalComissao = filtered.reduce((acc, v) => acc + Number((user?.isAdmin || user?.setor === 'RH') ? v.comissao_cheia : v.comissao_vendedor), 0);
 
   return (
-    <div className="space-y-8 animate-in fade-in duration-500 max-w-[1600px] mx-auto px-4">
+    <div className="space-y-10 animate-in fade-in duration-500 max-w-[1600px] mx-auto px-4">
       <div className="flex justify-between items-center">
         <h2 className="text-4xl font-black uppercase text-green-500 tracking-tighter">{title || 'FINANCEIRO'}</h2>
+        <button onClick={() => window.print()} className="bg-green-600 text-white px-5 py-3 rounded-lg font-black uppercase text-[9px] shadow-lg no-print hover:scale-105 transition-all">BAIXAR PDF</button>
       </div>
       <div className="bg-[#111827] rounded-[2.5rem] border border-gray-800 overflow-hidden shadow-2xl">
         <div className="overflow-x-auto">
-          <table className="w-full text-left border-collapse">
+          <table className="w-full text-left border-collapse" id="financeiro-table">
             <thead className="bg-[#0b0f1a]/50 text-[9px] font-black uppercase text-gray-500 tracking-widest">
               <tr>
                 <th className="px-8 py-6">DATA</th>
@@ -189,7 +189,7 @@ const FinanceiroView: React.FC<{
                   <td className="px-8 py-5 text-gray-500 font-bold text-[9px] uppercase">{v.empresa}</td>
                   <td className="px-8 py-5 text-blue-400 font-black text-[10px] uppercase">{v.vendedor}</td>
                   <td className="px-8 py-5 text-right text-green-500 font-black font-mono text-[10px]">
-                    {FORMAT_BRL((user?.isAdmin || user?.setor === 'RH') ? (v.comissao_cheia || 0) : (v.comissao_vendedor || 0))}
+                    {FORMAT_BRL((user?.isAdmin || user?.setor === 'RH') ? v.comissao_cheia : v.comissao_vendedor)}
                   </td>
                 </tr>
               ))}
@@ -198,9 +198,9 @@ const FinanceiroView: React.FC<{
         </div>
       </div>
       <div className="flex justify-center pt-6">
-        <div className="bg-[#111827] p-8 rounded-[2rem] border border-green-500/20 text-center">
-          <p className="text-gray-500 text-[9px] font-black uppercase mb-2 tracking-widest">TOTAL ACUMULADO</p>
-          <h3 className="text-5xl font-black text-green-500 font-mono tracking-tighter">{FORMAT_BRL(totalComissao)}</h3>
+        <div className="bg-[#111827] p-10 rounded-[3rem] border-2 border-green-500/20 text-center shadow-2xl shadow-green-500/5">
+          <p className="text-gray-500 text-[9px] font-black uppercase mb-4 tracking-widest">COMISSÃO TOTAL REALIZADA</p>
+          <h3 className="text-7xl font-black text-green-500 font-mono tracking-tighter">{FORMAT_BRL(totalComissao)}</h3>
         </div>
       </div>
     </div>
@@ -208,19 +208,15 @@ const FinanceiroView: React.FC<{
 };
 
 // --- VIEW CANCELAMENTOS ---
-const CancelamentosView: React.FC<{ 
-  cancelamentos: Cancelamento[], 
-  user: AuthUser | null, 
-  onAdd: () => void 
-}> = ({ cancelamentos, user, onAdd }) => {
+const CancelamentosView: React.FC<{ cancelamentos: Cancelamento[], user: AuthUser | null, onAdd: () => void }> = ({ cancelamentos, user, onAdd }) => {
   const uNome = (user?.nome || '').trim().toUpperCase();
   const filtered = (user?.isAdmin || user?.setor === 'RH') ? cancelamentos : cancelamentos.filter(c => (c.vendedor || '').trim().toUpperCase() === uNome);
 
   return (
-    <div className="space-y-8 animate-in fade-in duration-500 max-w-[1600px] mx-auto px-4">
+    <div className="space-y-10 animate-in fade-in duration-500 max-w-[1600px] mx-auto px-4">
       <div className="flex justify-between items-center">
         <h2 className="text-4xl font-black uppercase text-red-500 tracking-tighter">CANCELAMENTOS</h2>
-        <button onClick={onAdd} className="bg-red-600 text-white px-8 py-4 rounded-xl font-black uppercase text-[10px] shadow-xl">LANÇAR ESTORNO</button>
+        <button onClick={onAdd} className="bg-red-600 text-white px-8 py-4 rounded-xl font-black uppercase text-[10px] shadow-xl no-print hover:scale-105 transition-all">NOVO CANCELAMENTO</button>
       </div>
       <div className="bg-[#111827] rounded-[2.5rem] border border-gray-800 overflow-hidden shadow-2xl">
         <div className="overflow-x-auto">
@@ -269,6 +265,7 @@ const App: React.FC = () => {
   const [cancelamentos, setCancelamentos] = useState<Cancelamento[]>([]);
   const [modalType, setModalType] = useState<'venda' | 'indicacao' | 'usuario' | 'empresa' | 'meta' | 'cancelamento' | 'ver_info_lead' | null>(null);
   const [editingItem, setEditingItem] = useState<any>(null);
+  const [selectedVendas, setSelectedVendas] = useState<string[]>([]);
 
   useEffect(() => {
     const unsubVendas = cloud.subscribeVendas(setVendas);
@@ -291,6 +288,17 @@ const App: React.FC = () => {
     } else {
       const found = usuarios.find(u => (u.login || '').toLowerCase() === uI && u.senha === pI);
       if (found) { setUser({ ...found, isAdmin: found.setor === 'ADMIN' }); setIsAuthenticated(true); } else { alert('Credenciais inválidas'); }
+    }
+  };
+
+  const toggleVendaSelection = (id: string) => {
+    setSelectedVendas(prev => prev.includes(id) ? prev.filter(i => i !== id) : [...prev, id]);
+  };
+
+  const handleBulkDelete = async () => {
+    if (window.confirm(`Deseja excluir as ${selectedVendas.length} vendas selecionadas?`)) {
+      for (const id of selectedVendas) await cloud.apagar('vendas', id);
+      setSelectedVendas([]);
     }
   };
 
@@ -323,12 +331,12 @@ const App: React.FC = () => {
   const filteredIndicacoes = indicacoes.filter(i => (user?.isAdmin || user?.setor === 'RH') ? (salesmanFilter === 'TODOS' || (i.vendedor || '').toUpperCase() === salesmanFilter.toUpperCase()) : (i.vendedor || '').toUpperCase() === uNome);
 
   return (
-    <Layout user={user!} onLogout={() => { setIsAuthenticated(false); setUser(null); }} activeSection={activeSection} setActiveSection={(s) => { setActiveSection(s); setSelectedSellerRh(null); }}>
+    <Layout user={user!} onLogout={() => { setIsAuthenticated(false); setUser(null); }} activeSection={activeSection} setActiveSection={(s) => { setActiveSection(s); setSelectedSellerRh(null); setSelectedVendas([]); }}>
       {activeSection === 'dashboard' && <DashboardView vendas={vendas} indicacoes={indicacoes} metas={metas} user={user} />}
       
       {activeSection === 'kanban-indicacoes' && (
         <div className="space-y-8 animate-in fade-in duration-500">
-           <div className="flex justify-between items-center"><h2 className="text-4xl font-black uppercase text-yellow-500 tracking-tighter">LEADS</h2><button onClick={() => setActiveSection('cadastrar-indicacao')} className="bg-yellow-500 text-black px-10 py-4 rounded-2xl font-black uppercase text-[11px] shadow-lg">NOVO LEAD</button></div>
+           <div className="flex justify-between items-center"><h2 className="text-4xl font-black uppercase text-yellow-500 tracking-tighter">LEADS</h2><button onClick={() => setActiveSection('cadastrar-indicacao')} className="bg-yellow-500 text-black px-10 py-4 rounded-2xl font-black uppercase text-[11px] shadow-lg hover:scale-105 transition-all">NOVO LEAD</button></div>
            <div className="grid grid-cols-2 gap-4 mb-6"><input className="bg-[#111827] border border-gray-800 p-4 rounded-xl text-xs text-white uppercase outline-none" placeholder="BUSCAR LEADS..." value={searchTerm} onChange={e => setSearchTerm(e.target.value)} /><select className="bg-[#111827] border border-gray-800 p-4 rounded-xl text-xs text-white uppercase outline-none" value={salesmanFilter} onChange={e => setSalesmanFilter(e.target.value)}><option value="TODOS">TODOS VENDEDORES</option>{usuarios.filter(u => u.setor === 'VENDEDOR').map(u => <option key={u.id} value={u.nome}>{u.nome.toUpperCase()}</option>)}</select></div>
            <div className="flex gap-6 overflow-x-auto pb-8 scrollbar-thin h-[calc(100vh-320px)]">{INDICACAO_STATUS_MAP.map(status => (
                 <div key={status} className="kanban-column flex flex-col w-[350px] bg-[#0b0f1a]/50 rounded-[2.5rem] border border-gray-800/50 p-4"><h3 className="text-[10px] font-black uppercase text-gray-500 text-center mb-6 py-4 border-b border-gray-800/30 tracking-widest">{status}</h3>
@@ -342,13 +350,33 @@ const App: React.FC = () => {
 
       {activeSection === 'kanban-vendas' && (
         <div className="space-y-8 animate-in fade-in duration-500">
-           <div className="flex justify-between items-center"><h2 className="text-4xl font-black uppercase text-blue-500 tracking-tighter">PRODUÇÃO</h2><div className="flex gap-4"><input type="date" className="bg-[#111827] border border-gray-800 p-4 rounded-xl text-white text-xs outline-none uppercase font-bold" /><button onClick={() => { setEditingItem({ status: 'Fazer Vistoria', vendedor: uNome, valor: 0, comissao_cheia: 0, comissao_vendedor: 0 }); setModalType('venda'); }} className="bg-blue-600 text-white px-10 py-4 rounded-2xl font-black uppercase text-[11px] shadow-xl">LANÇAR VENDA</button></div></div>
-           <div className="grid grid-cols-2 gap-4 mb-6"><input className="bg-[#111827] border border-gray-800 p-4 rounded-xl text-xs text-white uppercase outline-none" placeholder="PESQUISAR PRODUÇÃO..." /><select className="bg-[#111827] border border-gray-800 p-4 rounded-xl text-xs text-white uppercase outline-none"><option value="TODOS">TODOS VENDEDORES</option></select></div>
+           <div className="flex justify-between items-center">
+              <h2 className="text-4xl font-black uppercase text-blue-500 tracking-tighter">PRODUÇÃO</h2>
+              <div className="flex gap-4">
+                {selectedVendas.length > 0 && (
+                  <button onClick={handleBulkDelete} className="bg-red-600 text-white px-6 py-4 rounded-2xl font-black uppercase text-[10px] shadow-xl hover:bg-red-500 animate-bounce">
+                    <i className="fas fa-trash mr-2"></i> EXCLUIR SELECIONADOS ({selectedVendas.length})
+                  </button>
+                )}
+                <button onClick={() => { setEditingItem({ status: 'Fazer Vistoria', vendedor: uNome, valor: 0, comissao_cheia: 0, comissao_vendedor: 0 }); setModalType('venda'); }} className="bg-blue-600 text-white px-10 py-4 rounded-2xl font-black uppercase text-[11px] shadow-xl hover:scale-105 transition-all">LANÇAR VENDA</button>
+              </div>
+           </div>
+           <div className="grid grid-cols-2 gap-4 mb-6"><input className="bg-[#111827] border border-gray-800 p-4 rounded-xl text-xs text-white uppercase outline-none" placeholder="PESQUISAR PRODUÇÃO..." /><select className="bg-[#111827] border border-gray-800 p-4 rounded-xl text-xs text-white uppercase outline-none" value={salesmanFilter} onChange={e => setSalesmanFilter(e.target.value)}><option value="TODOS">TODOS VENDEDORES</option>{usuarios.filter(u => u.setor === 'VENDEDOR').map(u => <option key={u.id} value={u.nome}>{u.nome.toUpperCase()}</option>)}</select></div>
            <div className="flex gap-6 overflow-x-auto pb-8 scrollbar-thin h-[calc(100vh-320px)]">{VENDA_STATUS_MAP.map(status => (
                 <div key={status} className="kanban-column flex flex-col w-[350px] bg-[#0b0f1a]/50 rounded-[2.5rem] border border-gray-800/50 p-4"><h3 className="text-[10px] font-black uppercase text-gray-500 text-center mb-6 py-4 border-b border-gray-800/30 tracking-widest">{status}</h3>
                   <div className="flex-1 space-y-6 overflow-y-auto pr-2 scrollbar-thin">{filteredVendas.filter(v => v.status === status).map(v => (
-                      <div key={v.id} className="bg-[#111827] rounded-[2rem] p-6 border border-blue-900/20 shadow-xl relative"><button onClick={() => { setEditingItem(v); setModalType('venda'); }} className="absolute top-6 right-6 text-gray-600 hover:text-white transition"><i className="fas fa-edit text-xs"></i></button>
-                        <div className="space-y-4"><div className="flex items-center gap-3"><input type="checkbox" className="w-4 h-4 rounded border-gray-800 bg-gray-900 accent-blue-500" /><div><p className="text-[12px] font-black text-white uppercase">{v.cliente}</p><p className="text-[9px] font-bold text-blue-500 uppercase tracking-tight">{v.tel} | {v.empresa}</p><p className="text-[7px] text-gray-600 font-bold uppercase mt-1">DATA: {new Date(v.dataCriacao).toLocaleDateString('pt-BR')}</p></div></div>
+                      <div key={v.id} className={`bg-[#111827] rounded-[2rem] p-6 border transition-all relative ${selectedVendas.includes(v.id!) ? 'border-blue-500 bg-blue-500/5' : 'border-blue-900/20 shadow-xl'}`}>
+                        <button onClick={() => { setEditingItem(v); setModalType('venda'); }} className="absolute top-6 right-6 text-gray-600 hover:text-white transition"><i className="fas fa-edit text-xs"></i></button>
+                        <div className="space-y-4">
+                          <div className="flex items-center gap-3">
+                            <input 
+                              type="checkbox" 
+                              className="w-4 h-4 rounded border-gray-800 bg-gray-900 accent-blue-500 cursor-pointer" 
+                              checked={selectedVendas.includes(v.id!)}
+                              onChange={() => toggleVendaSelection(v.id!)}
+                            />
+                            <div><p className="text-[12px] font-black text-white uppercase">{v.cliente}</p><p className="text-[9px] font-bold text-blue-500 uppercase tracking-tight">{v.tel} | {v.empresa}</p><p className="text-[7px] text-gray-600 font-bold uppercase mt-1">DATA: {new Date(v.dataCriacao).toLocaleDateString('pt-BR')}</p></div>
+                          </div>
                           <div className="text-center bg-[#0b0f1a]/50 py-6 rounded-[1.5rem] border border-gray-800/30"><p className="text-[8px] font-black text-gray-500 uppercase tracking-widest mb-1">PRÊMIO LÍQUIDO</p><h4 className="text-3xl font-black text-white font-mono">{FORMAT_BRL(v.valor)}</h4></div>
                           <div className="grid grid-cols-2 gap-3"><div className="bg-[#0b0f1a] p-3 rounded-2xl border border-gray-800 text-center"><p className="text-[7px] font-black text-gray-600 uppercase mb-1">C. CHEIA</p><p className="text-[10px] font-black text-white font-mono">{FORMAT_BRL(v.comissao_cheia)}</p></div><div className="bg-[#0b0f1a] p-3 rounded-2xl border border-gray-800 text-center"><p className="text-[7px] font-black text-green-500 uppercase mb-1">SUA PARTE</p><p className="text-[10px] font-black text-green-500 font-mono">{FORMAT_BRL(v.comissao_vendedor)}</p></div></div>
                           <div className="flex justify-between items-center pt-3 border-t border-gray-800/50"><button onClick={() => moveVenda(v, 'left')} className="text-gray-600 hover:text-white transition"><i className="fas fa-chevron-left text-[11px]"></i></button><span className="text-[9px] font-black text-blue-500 uppercase tracking-widest">{v.vendedor}</span><button onClick={() => moveVenda(v, 'right')} className="text-gray-600 hover:text-white transition"><i className="fas fa-chevron-right text-[11px]"></i></button></div></div>
@@ -384,10 +412,7 @@ const App: React.FC = () => {
             <h2 className="text-2xl font-black text-blue-400 uppercase text-center mb-10 tracking-[0.2em]">CADASTRAR EMISSÃO (RH)</h2>
             <div className="space-y-6">
               <div className="space-y-1"><label className="text-[8px] font-black uppercase text-gray-500 ml-2">NOME CLIENTE</label><input className="w-full bg-[#0b0f1a] border border-gray-800 p-5 rounded-xl text-white outline-none font-bold uppercase" value={editingItem?.cliente || ''} onChange={e => setEditingItem({...editingItem, cliente: e.target.value.toUpperCase()})} /></div>
-              <div className="grid grid-cols-2 gap-6">
-                <div className="space-y-1"><label className="text-[8px] font-black uppercase text-gray-500 ml-2">TEL</label><input className="w-full bg-[#0b0f1a] border border-gray-800 p-5 rounded-xl text-white outline-none" value={editingItem?.tel || ''} onChange={e => setEditingItem({...editingItem, tel: e.target.value})} /></div>
-                <div className="space-y-1"><label className="text-[8px] font-black uppercase text-gray-500 ml-2">SEGURADORA</label><select className="w-full bg-[#0b0f1a] border border-gray-800 p-5 rounded-xl text-white outline-none font-black uppercase" value={editingItem?.empresa || ''} onChange={e => setEditingItem({...editingItem, empresa: e.target.value})}><option value="">SELECIONE</option>{empresas.map(emp => <option key={emp.id} value={emp.nome}>{emp.nome.toUpperCase()}</option>)}</select></div>
-              </div>
+              <div className="space-y-1"><label className="text-[8px] font-black uppercase text-gray-500 ml-2">SEGURADORA</label><select className="w-full bg-[#0b0f1a] border border-gray-800 p-5 rounded-xl text-white outline-none font-black uppercase" value={editingItem?.empresa || ''} onChange={e => setEditingItem({...editingItem, empresa: e.target.value})}><option value="">SELECIONE</option>{empresas.map(emp => <option key={emp.id} value={emp.nome}>{emp.nome.toUpperCase()}</option>)}</select></div>
               <div className="space-y-1"><label className="text-[8px] font-black uppercase text-gray-500 ml-2">VENDEDOR RESPONSÁVEL</label><select className="w-full bg-[#0b0f1a] border border-gray-800 p-5 rounded-xl text-white outline-none font-black uppercase" value={editingItem?.vendedor || ''} onChange={e => setEditingItem({...editingItem, vendedor: e.target.value})}><option value="">SELECIONE VENDEDOR</option>{usuarios.filter(u => u.setor === 'VENDEDOR').map(u => <option key={u.id} value={u.nome}>{u.nome.toUpperCase()}</option>)}</select></div>
               <div className="grid grid-cols-4 gap-4">
                 <div className="text-center"><p className="text-[6px] font-black text-gray-600 uppercase mb-2">PRÊMIO</p><input type="number" className="w-full bg-[#0b0f1a] p-3 rounded-lg border border-gray-800 text-center text-xs text-white" value={editingItem?.valor || 0} onChange={e => setEditingItem({...editingItem, valor: Number(e.target.value)})} /></div>
@@ -395,15 +420,15 @@ const App: React.FC = () => {
                 <div className="text-center"><p className="text-[6px] font-black text-gray-600 uppercase mb-2">C. CHEIA</p><input type="number" className="w-full bg-[#0b0f1a] p-3 rounded-lg border border-gray-800 text-center text-xs text-white" value={editingItem?.comissao_cheia || 0} onChange={e => setEditingItem({...editingItem, comissao_cheia: Number(e.target.value)})} /></div>
                 <div className="text-center"><p className="text-[6px] font-black text-green-500 uppercase mb-2">C. VEND</p><input type="number" className="w-full bg-[#0b0f1a] p-3 rounded-lg border border-gray-800 text-center text-xs text-green-500" value={editingItem?.comissao_vendedor || 0} onChange={e => setEditingItem({...editingItem, comissao_vendedor: Number(e.target.value)})} /></div>
               </div>
-              <button onClick={async () => { await cloud.salvarVenda({...editingItem, status: 'Pagamento Efetuado', origem: 'RH', dataCriacao: Date.now()}); alert("Emissão cadastrada!"); setActiveSection('dashboard'); }} className="w-full bg-blue-600 p-5 rounded-xl font-black uppercase text-white text-[11px] shadow-xl hover:bg-blue-500 transition-all">FINALIZAR EMISSÃO</button>
+              <button onClick={async () => { await cloud.salvarVenda({...editingItem, status: 'Pagamento Efetuado', origem: 'RH', dataCriacao: Date.now()}); alert("Emissão cadastrada com sucesso!"); setEditingItem({}); }} className="w-full bg-blue-600 p-5 rounded-xl font-black uppercase text-white text-[11px] shadow-xl hover:bg-blue-500 transition-all">FINALIZAR EMISSÃO</button>
             </div>
           </div>
         </div>
       )}
 
       {activeSection === 'vendedores' && (
-        <div className="space-y-10 animate-in fade-in duration-500 max-w-[1600px] mx-auto">
-           <div className="flex justify-between items-center"><h2 className="text-4xl font-black uppercase text-red-500 tracking-tighter">EQUIPE</h2><button onClick={() => { setEditingItem({ nome: '', login: '', senha: '', setor: 'VENDEDOR', comissao: 0 }); setModalType('usuario'); }} className="bg-red-600 text-white px-8 py-4 rounded-xl font-black uppercase text-[10px] shadow-xl">NOVO USUÁRIO</button></div>
+        <div className="space-y-10 animate-in fade-in duration-500 max-w-[1600px] mx-auto px-4">
+           <div className="flex justify-between items-center"><h2 className="text-4xl font-black uppercase text-red-500 tracking-tighter">EQUIPE</h2><button onClick={() => { setEditingItem({ nome: '', login: '', senha: '', setor: 'VENDEDOR', comissao: 0 }); setModalType('usuario'); }} className="bg-red-600 text-white px-8 py-4 rounded-xl font-black uppercase text-[10px] shadow-xl hover:scale-105 transition-all">NOVO USUÁRIO</button></div>
            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
               {usuarios.map(u => (
                 <div key={u.id} className="bg-[#111827] p-8 rounded-[2rem] border border-gray-800 shadow-xl relative group transition-all">
@@ -418,7 +443,7 @@ const App: React.FC = () => {
       )}
 
       {activeSection === 'metas' && (
-        <div className="space-y-10 animate-in fade-in duration-500 max-w-[1600px] mx-auto">
+        <div className="space-y-10 animate-in fade-in duration-500 max-w-[1600px] mx-auto px-4">
            <h2 className="text-4xl font-black uppercase text-blue-500 tracking-tighter">METAS DOS VENDEDORES</h2>
            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
               {usuarios.filter(u => u.setor === 'VENDEDOR').map(u => {
@@ -436,12 +461,12 @@ const App: React.FC = () => {
       )}
 
       {activeSection === 'performance' && (
-        <div className="space-y-12 animate-in fade-in duration-500 max-w-[1600px] mx-auto">
+        <div className="space-y-12 animate-in fade-in duration-500 max-w-[1600px] mx-auto px-4">
            <h2 className="text-4xl font-black uppercase text-purple-500 tracking-tighter">PERFORMANCE TEAM</h2>
            <div className="bg-[#111827] p-8 rounded-[2rem] border border-gray-800 shadow-xl"><h3 className="text-[9px] font-black text-gray-500 uppercase mb-8 flex items-center gap-2 tracking-widest"><i className="fas fa-book-open text-purple-500"></i> PRODUÇÃO GLOBAL POR SEGURADORA (MÊS)</h3>
              <div className="grid grid-cols-2 md:grid-cols-5 gap-6">
-                {['PORTO SEGURO', 'ITURAN', 'SUHAI SEGURADORA', 'ALLIANZ', 'TOKIO MARINE'].map(emp => (
-                  <div key={emp} className="bg-[#0b0f1a] p-6 rounded-2xl border border-gray-800 text-center relative overflow-hidden"><div className="absolute top-0 left-0 w-full h-0.5 bg-purple-500/20"></div><p className="text-[7px] font-black text-gray-600 uppercase mb-4">{emp}</p><h4 className="text-3xl font-black text-white">{vendas.filter(v => (v.empresa || '').toUpperCase() === emp).length}</h4><p className="text-[6px] font-bold text-purple-500 uppercase mt-2">APÓLICES EM PRODUÇÃO</p></div>
+                {empresas.map(emp => (
+                  <div key={emp.id} className="bg-[#0b0f1a] p-6 rounded-2xl border border-gray-800 text-center relative overflow-hidden"><div className="absolute top-0 left-0 w-full h-0.5 bg-purple-500/20"></div><p className="text-[7px] font-black text-gray-600 uppercase mb-4">{emp.nome}</p><h4 className="text-3xl font-black text-white">{vendas.filter(v => (v.empresa || '').toUpperCase() === emp.nome.toUpperCase()).length}</h4><p className="text-[6px] font-bold text-purple-500 uppercase mt-2">APÓLICES</p></div>
                 ))}
              </div>
            </div>
@@ -451,12 +476,10 @@ const App: React.FC = () => {
                 return (
                   <div key={u.id} className="bg-[#111827] p-10 rounded-[2.5rem] border border-gray-800 shadow-2xl relative overflow-hidden"><div className="absolute top-0 left-0 w-1 h-full bg-purple-500/30"></div><h4 className="text-center text-2xl font-black text-white uppercase tracking-tight mb-8">{u.nome}</h4>
                     <div className="bg-[#0b0f1a] py-8 rounded-[2rem] border border-gray-800 text-center mb-10"><p className="text-[8px] font-black text-gray-500 uppercase mb-2">PRODUÇÃO REAL (MÊS)</p><h5 className="text-7xl font-black text-purple-500">{uv.length}</h5></div>
-                    <div className="space-y-4 mb-10"><p className="text-[8px] font-black text-gray-700 uppercase tracking-widest border-b border-gray-800 pb-2">QUEBRA POR EMPRESA</p>
-                      {['PORTO SEGURO', 'ITURAN', 'SUHAI SEGURADORA', 'ALLIANZ', 'TOKIO MARINE'].map(emp => (
-                        <div key={emp} className="flex justify-between items-center text-[9px] font-black text-gray-500"><span>{emp}</span><span className="text-white">{uv.filter(v => (v.empresa || '').toUpperCase() === emp).length}</span></div>
-                      ))}
+                    <div className="space-y-4 mb-10"><p className="text-[8px] font-black text-gray-700 uppercase tracking-widest border-b border-gray-800 pb-2">PRÊMIO E COMISSÃO</p>
+                       <div className="flex justify-between items-center text-[9px] font-black text-gray-500"><span>TOTAL PRÊMIO</span><span className="text-white">{FORMAT_BRL(uv.reduce((a,b) => a + Number(b.valor || 0), 0))}</span></div>
+                       <div className="flex justify-between items-center text-[9px] font-black text-gray-500"><span>TOTAL COMISSÃO</span><span className="text-green-500">{FORMAT_BRL(uv.reduce((a,b) => a + Number(b.comissao_vendedor || 0), 0))}</span></div>
                     </div>
-                    <div className="grid grid-cols-2 gap-4"><div className="bg-gray-800/30 p-3 rounded-xl text-center"><p className="text-[6px] font-black text-green-500 uppercase">C. PRODUZIDA</p><p className="text-[10px] font-black text-white">{FORMAT_BRL(uv.reduce((a, b) => a + Number(b.comissao_vendedor || 0), 0))}</p></div><div className="bg-gray-800/30 p-3 rounded-xl text-center"><p className="text-[6px] font-black text-blue-500 uppercase">PRÊMIO PRODUZIDO</p><p className="text-[10px] font-black text-white">{FORMAT_BRL(uv.reduce((a, b) => a + Number(b.valor || 0), 0))}</p></div></div>
                   </div>
                 );
               })}
@@ -465,18 +488,18 @@ const App: React.FC = () => {
       )}
 
       {activeSection === 'configuracoes' && (
-        <div className="space-y-10 animate-in fade-in duration-500 max-w-[1600px] mx-auto">
-           <div className="flex justify-between items-center"><h2 className="text-4xl font-black uppercase text-gray-400 tracking-tighter">CONFIGURAÇÕES</h2><button onClick={() => { setEditingItem({ nome: '' }); setModalType('empresa'); }} className="bg-gray-700 text-white px-5 py-3 rounded-lg font-black uppercase text-[9px] shadow-lg">NOVA SEGURADORA</button></div>
+        <div className="space-y-10 animate-in fade-in duration-500 max-w-[1600px] mx-auto px-4">
+           <div className="flex justify-between items-center"><h2 className="text-4xl font-black uppercase text-gray-400 tracking-tighter">CONFIGURAÇÕES</h2><button onClick={() => { setEditingItem({ nome: '' }); setModalType('empresa'); }} className="bg-gray-700 text-white px-5 py-3 rounded-lg font-black uppercase text-[9px] shadow-lg hover:scale-105 transition-all">NOVA SEGURADORA</button></div>
            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
               {empresas.map(emp => (
-                <div key={emp.id} className="bg-[#111827] p-8 rounded-2xl border border-gray-800 flex justify-between items-center"><span className="text-sm font-black text-white uppercase">{emp.nome}</span><button onClick={() => { if(window.confirm('Excluir?')) cloud.apagar('empresas', emp.id!) }} className="text-gray-700 hover:text-red-500 transition"><i className="fas fa-trash"></i></button></div>
+                <div key={emp.id} className="bg-[#111827] p-8 rounded-2xl border border-gray-800 flex justify-between items-center hover:border-gray-600 transition-all"><span className="text-sm font-black text-white uppercase">{emp.nome}</span><button onClick={() => { if(window.confirm('Excluir?')) cloud.apagar('empresas', emp.id!) }} className="text-gray-700 hover:text-red-500 transition"><i className="fas fa-trash"></i></button></div>
               ))}
            </div>
         </div>
       )}
 
       {activeSection === 'relatorio-vendas' && (
-        <div className="space-y-10 animate-in fade-in duration-500 max-w-[1600px] mx-auto">
+        <div className="space-y-10 animate-in fade-in duration-500 max-w-[1600px] mx-auto px-4">
           {!selectedSellerRh ? (
             <>
               <h2 className="text-4xl font-black uppercase text-blue-400 tracking-tighter">RELATÓRIO DE VENDAS (RH)</h2>
@@ -534,7 +557,7 @@ const App: React.FC = () => {
       )}
 
       {activeSection === 'falta-pagar' && (
-        <div className="space-y-10 animate-in fade-in duration-500 max-w-[1600px] mx-auto">
+        <div className="space-y-10 animate-in fade-in duration-500 max-w-[1600px] mx-auto px-4">
           <div className="flex justify-between items-center"><h2 className="text-4xl font-black uppercase text-yellow-500 tracking-tighter">FALTA PAGAR (PRODUÇÃO)</h2><button className="bg-[#10b981] text-white px-5 py-3 rounded-lg font-black uppercase text-[9px] shadow-lg">BAIXAR EM EXCEL</button></div>
           <div className="bg-[#111827] rounded-[2.5rem] border border-gray-800 overflow-hidden shadow-2xl">
             <div className="overflow-x-auto"><table className="w-full text-left border-collapse"><thead className="bg-[#0b0f1a]/50 text-[9px] font-black uppercase text-gray-500 tracking-widest"><tr><th className="px-10 py-6 border-b border-gray-800">NOME CLIENTE</th><th className="px-10 py-6 border-b border-gray-800">TELEFONE</th><th className="px-10 py-6 border-b border-gray-800">SEGURADORA</th><th className="px-10 py-6 border-b border-gray-800">VENDEDOR</th><th className="px-10 py-6 border-b border-gray-800 text-right">COMISSÃO CHEIA</th></tr></thead>
