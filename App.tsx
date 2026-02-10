@@ -210,13 +210,15 @@ const App: React.FC = () => {
 
   const filteredVendas = vendas.filter(v => {
     const matchesSalesman = (currentUserData.setor === 'ADMIN' || currentUserData.setor === 'RH') ? (salesmanFilter === 'TODOS' || (v.vendedor || '').toUpperCase() === salesmanFilter.toUpperCase()) : (v.vendedor || '').toUpperCase() === (currentUserData.nome || '').toUpperCase();
-    const matchesSearch = v.cliente.toUpperCase().includes(searchTerm.toUpperCase()) || v.tel.includes(searchTerm);
+    // FIX: Adição de guards para evitar erro 'includes' de undefined
+    const matchesSearch = (v.cliente || '').toUpperCase().includes(searchTerm.toUpperCase()) || (v.tel || '').includes(searchTerm);
     return matchesSalesman && matchesSearch;
   });
 
   const filteredIndicacoes = indicacoes.filter(i => {
     const matchesSalesman = (currentUserData.setor === 'ADMIN' || currentUserData.setor === 'RH') ? (salesmanFilter === 'TODOS' || (i.vendedor || '').toUpperCase() === salesmanFilter.toUpperCase()) : (i.vendedor || '').toUpperCase() === (currentUserData.nome || '').toUpperCase();
-    const matchesSearch = i.cliente.toUpperCase().includes(searchTerm.toUpperCase()) || i.tel.includes(searchTerm);
+    // FIX: Adição de guards para evitar erro 'includes' de undefined
+    const matchesSearch = (i.cliente || '').toUpperCase().includes(searchTerm.toUpperCase()) || (i.tel || '').includes(searchTerm);
     return matchesSalesman && matchesSearch;
   });
 
@@ -557,7 +559,7 @@ const App: React.FC = () => {
             </h3>
             <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-7 gap-4">
               {['ALLIANZ', 'BRADESCO', 'HDI', 'ITURAN', 'PORTO SEGURO', 'SUHAI SEGURADORA', 'TOKIO MARINE'].map(name => {
-                const count = vendas.filter(v => v.empresa?.toUpperCase() === name && new Date(v.dataCriacao).getMonth() === new Date().getMonth()).length;
+                const count = vendas.filter(v => (v.empresa || '').toUpperCase() === name && new Date(v.dataCriacao).getMonth() === new Date().getMonth()).length;
                 return (
                   <div key={name} className="bg-[#0b0f1a] p-8 rounded-2xl border border-gray-800/40 flex flex-col items-center justify-center text-center group hover:border-purple-500/20 transition-all">
                     <p className="text-[7px] font-black text-gray-600 uppercase tracking-widest mb-3">{name}</p>
