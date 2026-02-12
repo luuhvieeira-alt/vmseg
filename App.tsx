@@ -193,7 +193,7 @@ const App: React.FC = () => {
     if (nextIdx >= 0 && nextIdx < INDICACAO_STATUS_MAP.length) await cloud.updateStatus('indicacoes', i.id!, INDICACAO_STATUS_MAP[nextIdx]);
   };
 
-  // --- HOOKS AT THE TOP (FIXING REACT ERROR #310) ---
+  // --- HOOKS AT THE TOP ---
 
   const currentUserData = useMemo(() => {
     if (!user) return null;
@@ -205,18 +205,13 @@ const App: React.FC = () => {
   const filteredVendas = useMemo(() => {
     if (!currentUserData) return [];
     return vendas.filter(v => {
-      // 1. ISOLAMENTO TOTAL: Se a venda é do RH (emissão), ela NÃO aparece no Kanban de Produção
       if (v.origem === 'RH') return false;
-
       const matchesSalesman = (currentUserData.setor === 'ADMIN' || currentUserData.setor === 'RH') 
         ? (salesmanFilter === 'TODOS' || (v.vendedor || '').toUpperCase() === salesmanFilter.toUpperCase()) 
         : (v.vendedor || '').toUpperCase() === (currentUserData.nome || '').toUpperCase();
-      
       const cNome = (v.cliente || '').toUpperCase();
       const sTerm = searchTerm.toUpperCase();
-      const matchesSearch = cNome.includes(sTerm) || (v.tel || '').includes(searchTerm);
-      
-      return matchesSalesman && matchesSearch;
+      return matchesSalesman && (cNome.includes(sTerm) || (v.tel || '').includes(searchTerm));
     });
   }, [vendas, currentUserData, salesmanFilter, searchTerm]);
 
@@ -226,12 +221,9 @@ const App: React.FC = () => {
       const matchesSalesman = (currentUserData.setor === 'ADMIN' || currentUserData.setor === 'RH') 
         ? (salesmanFilter === 'TODOS' || (i.vendedor || '').toUpperCase() === salesmanFilter.toUpperCase()) 
         : (i.vendedor || '').toUpperCase() === (currentUserData.nome || '').toUpperCase();
-      
       const cNome = (i.cliente || '').toUpperCase();
       const sTerm = searchTerm.toUpperCase();
-      const matchesSearch = cNome.includes(sTerm) || (i.tel || '').includes(searchTerm);
-      
-      return matchesSalesman && matchesSearch;
+      return matchesSalesman && (cNome.includes(sTerm) || (i.tel || '').includes(searchTerm));
     });
   }, [indicacoes, currentUserData, salesmanFilter, searchTerm]);
 
@@ -241,6 +233,16 @@ const App: React.FC = () => {
     const uNome = (currentUserData.nome || '').trim().toUpperCase();
     return cancelamentos.filter(c => (c.vendedor || '').trim().toUpperCase() === uNome);
   }, [cancelamentos, currentUserData]);
+
+  const financeiroVendas = useMemo(() => {
+    if (!currentUserData) return [];
+    const isMaster = currentUserData.setor === 'ADMIN' || currentUserData.setor === 'RH';
+    return vendas.filter(v => {
+      if (v.origem === 'RH' || v.status !== 'Pagamento Efetuado') return false;
+      if (isMaster) return true;
+      return (v.vendedor || '').trim().toUpperCase() === (currentUserData.nome || '').trim().toUpperCase();
+    });
+  }, [vendas, currentUserData]);
 
   // --- CONDITIONAL RETURNS ---
 
@@ -325,8 +327,7 @@ const App: React.FC = () => {
                   <h3 className="text-[11px] font-black uppercase text-gray-500 text-center mb-6 py-4 border-b border-gray-800/30 tracking-[0.2em]">{status}</h3>
                   <div className="flex-1 space-y-6 overflow-y-auto pr-2 scrollbar-thin">
                     {filteredVendas.filter(v => v.status === status).map(v => (
-                      <div key={v.id} className="bg-[#111827] rounded-[2.2rem] p-8 border border-gray-800/30 shadow-xl relative group transition-all hover:border-blue-500/20">
-                        {/* DELETAR & EDITAR */}
+                      <div key={v.id} className="bg-[#111827] rounded-[2.2rem] p-8 border border-gray-800/30 shadow-xl relative group transition-all hover:border-yellow-500/20">
                         <div className="absolute top-8 right-8 flex gap-4">
                           <button 
                             onClick={() => { if(window.confirm('Excluir venda?')) cloud.apagar('vendas', v.id!) }} 
@@ -377,11 +378,11 @@ const App: React.FC = () => {
         </div>
       )}
 
-      {/* MINHA FOLHA DE PAGAMENTO (VENDEDOR) */}
+      {/* MINHA FOLHA DE PAGAMENTO (VENDEDOR - APENAS RH) */}
       {activeSection === 'pagamento' && currentUserData.setor === 'VENDEDOR' && (
         <div className="space-y-10 animate-in fade-in duration-500 max-w-[1600px] mx-auto px-4">
           <div className="flex justify-between items-center">
-            <h2 className="text-[32px] font-black text-green-400 uppercase tracking-tighter">MINHA FOLHA DE PAGAMENTO</h2>
+            <h2 className="text-[32px] font-black text-green-400 uppercase tracking-tighter">MINHA FOLHA DE PAGAMENTO (RH)</h2>
             <button onClick={() => window.print()} className="bg-green-600 text-white px-6 py-3 rounded-xl font-black text-[9px] uppercase shadow-lg hover:bg-green-500 transition-all"><i className="fas fa-print mr-2"></i> IMPRIMIR MINHA FOLHA</button>
           </div>
           <div id="financeiro-table" className="bg-[#111827] rounded-[1.5rem] border border-gray-800/30 overflow-hidden shadow-2xl">
@@ -446,30 +447,60 @@ const App: React.FC = () => {
         </div>
       )}
 
-      {/* FINANCEIRO - COM CAIXA DE SOMA NO TOPO */}
+      {/* FINANCEIRO (PRODUÇÃO) */}
       {activeSection === 'comissao' && (
         <div className="space-y-10 animate-in fade-in duration-500 max-w-full px-10">
-           <div className="flex justify-between items-center"><h2 className="text-[38px] font-black uppercase text-green-500 tracking-tight">FINANCEIRO</h2><button onClick={() => window.print()} className="bg-green-500 text-black px-6 py-3 rounded-lg font-black uppercase text-[10px] shadow-lg hover:bg-green-400 transition-all">BAIXAR PDF</button></div>
+           <div className="flex justify-between items-center">
+              <h2 className="text-[38px] font-black uppercase text-green-500 tracking-tight">
+                {currentUserData.isAdmin ? 'FINANCEIRO GLOBAL' : 'MEU FINANCEIRO'}
+              </h2>
+              <button onClick={() => window.print()} className="bg-green-500 text-black px-6 py-3 rounded-lg font-black uppercase text-[10px] shadow-lg hover:bg-green-400 transition-all">BAIXAR PDF</button>
+           </div>
            
            <div className="flex justify-center">
              <div className="bg-[#111827] w-full max-w-md p-8 rounded-[2rem] border border-gray-800 text-center shadow-2xl relative overflow-hidden group">
-                <p className="text-[10px] font-black text-gray-500 uppercase tracking-widest mb-3">TOTAL COMISSÕES REALIZADAS</p>
+                <p className="text-[10px] font-black text-gray-500 uppercase tracking-widest mb-3">COMISSÃO REALIZADA (PRODUÇÃO)</p>
                 <h3 className="text-5xl font-black text-green-500 font-mono tracking-tighter">
-                  {FORMAT_BRL(vendas.filter(v => v.origem !== 'RH' && v.status === 'Pagamento Efetuado').reduce((acc, v) => acc + Number(v.comissao_vendedor || 0), 0))}
+                  {FORMAT_BRL(financeiroVendas.reduce((acc, v) => acc + Number(v.comissao_vendedor || 0), 0))}
                 </h3>
                 <div className="absolute inset-0 border-2 border-green-500/5 rounded-[2rem] pointer-events-none group-hover:border-green-500/20 transition-all duration-700"></div>
              </div>
            </div>
 
            <div id="financeiro-table" className="bg-[#111827] rounded-[2.5rem] border border-gray-800/50 overflow-hidden shadow-2xl">
-              <table className="w-full text-left"><thead className="bg-[#0b0f1a]/50 text-[10px] font-black uppercase text-gray-500 tracking-widest border-b border-gray-800/50"><tr><th className="px-10 py-8">DATA</th><th className="px-10 py-8">CLIENTE</th><th className="px-10 py-8">SEGURADORA</th><th className="px-10 py-8">VENDEDOR</th><th className="px-10 py-8">COMISSÃO</th></tr></thead><tbody className="divide-y divide-gray-800/50">{vendas.filter(v => v.origem !== 'RH' && v.status === 'Pagamento Efetuado').map(v => (<tr key={v.id} className="hover:bg-white/5 transition-colors group"><td className="px-10 py-6 text-gray-500 font-bold text-[11px]">{new Date(v.dataCriacao).toLocaleDateString('pt-BR')}</td><td className="px-10 py-6 text-white font-black text-[11px] uppercase tracking-tight">{v.cliente}</td><td className="px-10 py-6 text-gray-400 font-bold text-[10px] uppercase">{v.empresa || 'SUHAI SEGURADORA'}</td><td className="px-10 py-6 text-blue-500 font-black text-[11px] uppercase">{v.vendedor}</td><td className="px-10 py-6 text-green-500 font-black font-mono text-[11px]">{FORMAT_BRL(v.comissao_vendedor)}</td></tr>))}</tbody></table>
+              <table className="w-full text-left">
+                <thead className="bg-[#0b0f1a]/50 text-[10px] font-black uppercase text-gray-500 tracking-widest border-b border-gray-800/50">
+                  <tr>
+                    <th className="px-10 py-8">DATA</th>
+                    <th className="px-10 py-8">CLIENTE</th>
+                    <th className="px-10 py-8">SEGURADORA</th>
+                    {currentUserData.isAdmin && <th className="px-10 py-8">VENDEDOR</th>}
+                    <th className="px-10 py-8">COMISSÃO</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-800/50">
+                  {financeiroVendas.length === 0 ? (
+                    <tr><td colSpan={currentUserData.isAdmin ? 5 : 4} className="px-10 py-12 text-center text-gray-600 font-black uppercase text-[10px] tracking-widest">Nenhuma comissão de produção registrada</td></tr>
+                  ) : (
+                    financeiroVendas.map(v => (
+                      <tr key={v.id} className="hover:bg-white/5 transition-colors group">
+                        <td className="px-10 py-6 text-gray-500 font-bold text-[11px]">{new Date(v.dataCriacao).toLocaleDateString('pt-BR')}</td>
+                        <td className="px-10 py-6 text-white font-black text-[11px] uppercase tracking-tight">{v.cliente}</td>
+                        <td className="px-10 py-6 text-gray-400 font-bold text-[10px] uppercase">{v.empresa || 'SUHAI SEGURADORA'}</td>
+                        {currentUserData.isAdmin && <td className="px-10 py-6 text-blue-500 font-black text-[11px] uppercase">{v.vendedor}</td>}
+                        <td className="px-10 py-6 text-green-500 font-black font-mono text-[11px]">{FORMAT_BRL(v.comissao_vendedor)}</td>
+                      </tr>
+                    ))
+                  )}
+                </tbody>
+              </table>
            </div>
         </div>
       )}
 
-      {/* --- SETOR RH --- */}
+      {/* --- SETOR RH (CADASTRAR EMISSÃO / RELATÓRIOS) --- */}
 
-      {/* FALTA PAGAR (PRODUÇÃO) - RÉPLICA DO PRINT */}
+      {/* FALTA PAGAR (AUDITORIA DE PRODUÇÃO PARA ADMIN/RH) */}
       {activeSection === 'falta-pagar' && (
         <div className="space-y-10 animate-in fade-in duration-500 max-w-full px-10">
           <div className="flex justify-between items-center">
@@ -489,7 +520,7 @@ const App: React.FC = () => {
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-800/30">
-                {vendas.filter(v => v.origem === 'RH' && (v.status === 'Falta Pagamento' || v.status === 'Mandar Boletos')).map(v => (
+                {vendas.filter(v => v.origem !== 'RH' && v.status === 'Falta Pagamento').map(v => (
                   <tr key={v.id} className="hover:bg-white/5 transition-colors group">
                     <td className="px-10 py-6 text-white font-black text-[11px] uppercase tracking-tight">{v.cliente}</td>
                     <td className="px-10 py-6 text-gray-500 font-bold text-[11px]">{v.tel}</td>
@@ -498,9 +529,9 @@ const App: React.FC = () => {
                     <td className="px-10 py-6 text-white font-black font-mono text-[11px]">{FORMAT_BRL(v.comissao_cheia)}</td>
                   </tr>
                 ))}
-                {vendas.filter(v => v.origem === 'RH' && (v.status === 'Falta Pagamento' || v.status === 'Mandar Boletos')).length === 0 && (
+                {vendas.filter(v => v.origem !== 'RH' && v.status === 'Falta Pagamento').length === 0 && (
                   <tr>
-                    <td colSpan={5} className="px-10 py-12 text-center text-gray-600 font-black uppercase text-[10px] tracking-widest">Nenhum registro de pagamento pendente</td>
+                    <td colSpan={5} className="px-10 py-12 text-center text-gray-600 font-black uppercase text-[10px] tracking-widest">Nenhum registro de produção aguardando pagamento</td>
                   </tr>
                 )}
               </tbody>
@@ -614,7 +645,7 @@ const App: React.FC = () => {
         </div>
       )}
 
-      {/* DISTRIBUIR LEADS */}
+      {/* OUTRAS SEÇÕES */}
       {activeSection === 'cadastrar-indicacao' && currentUserData.setor === 'ADMIN' && (
         <div className="flex items-center justify-center min-h-[calc(100vh-120px)] animate-in fade-in duration-500">
            <div className="bg-[#111827] w-full max-w-xl rounded-[2.5rem] p-12 border border-gray-800 shadow-2xl relative">
@@ -634,7 +665,6 @@ const App: React.FC = () => {
         </div>
       )}
 
-      {/* PERFORMANCE */}
       {activeSection === 'performance' && (
         <div className="space-y-16 animate-in fade-in duration-500 max-w-[1600px] mx-auto px-4 pb-20">
           <h2 className="text-[34px] font-black text-purple-500 uppercase tracking-tighter">PERFORMANCE TEAM</h2>
@@ -666,7 +696,6 @@ const App: React.FC = () => {
         </div>
       )}
 
-      {/* CONFIGURAÇÕES */}
       {activeSection === 'configuracoes' && currentUserData.setor === 'ADMIN' && (
         <div className="space-y-10 max-w-[1200px] mx-auto animate-in fade-in duration-500 px-4">
            <div className="flex justify-between items-center"><h2 className="text-[34px] font-black text-gray-400 uppercase tracking-tighter">CONFIGURAÇÕES</h2><button onClick={() => { setEditingItem({}); setModalType('empresa'); }} className="bg-gray-700 text-white px-8 py-4 rounded-xl font-black uppercase text-[10px] shadow-lg hover:bg-gray-600 transition-all">NOVA SEGURADORA</button></div>
@@ -681,7 +710,6 @@ const App: React.FC = () => {
         </div>
       )}
 
-      {/* VENDEDORES */}
       {activeSection === 'vendedores' && currentUserData.setor === 'ADMIN' && (
         <div className="space-y-10 max-w-[1600px] mx-auto animate-in fade-in duration-500 px-4">
            <div className="flex justify-between items-center"><h2 className="text-[34px] font-black text-red-500 tracking-tighter uppercase">GESTÃO DE EQUIPE</h2><button onClick={() => { setEditingItem({ setor: 'VENDEDOR', comissao: 0 }); setModalType('usuario'); }} className="bg-red-600 text-white px-8 py-4 rounded-xl font-black uppercase text-[10px] shadow-lg hover:scale-105 transition-all">CADASTRAR NOVO USUÁRIO</button></div>
@@ -697,7 +725,6 @@ const App: React.FC = () => {
         </div>
       )}
 
-      {/* METAS */}
       {activeSection === 'metas' && currentUserData.setor === 'ADMIN' && (
         <div className="space-y-10 max-w-[1600px] mx-auto animate-in fade-in duration-500 px-4">
            <div className="flex justify-between items-center"><h2 className="text-[34px] font-black text-blue-500 uppercase tracking-tighter">DEFINIÇÃO DE METAS</h2><button onClick={() => { setEditingItem({ meta_qtd: 0, meta_premio: 0, meta_salario: 0 }); setModalType('meta'); }} className="bg-blue-600 text-white px-8 py-4 rounded-xl font-black uppercase text-[10px] shadow-lg hover:scale-105 transition-all">NOVA META</button></div>
@@ -781,12 +808,6 @@ const App: React.FC = () => {
                 </div>
                 <div className="space-y-1"><label className="text-[9px] font-black uppercase text-red-500 ml-2 tracking-widest">VALOR DO ESTORNO</label><input type="number" className="w-full bg-[#0b0f1a] border border-gray-800 p-5 rounded-xl text-red-500 outline-none text-xs font-black font-mono shadow-inner" value={editingItem?.valor_comissao || 0} onChange={e => setEditingItem({...editingItem, valor_comissao: Number(e.target.value)})} /></div>
               </div>
-            )}
-            {modalType === 'usuario' && (
-              <div className="space-y-6"><div className="space-y-1"><label className="text-[9px] font-black uppercase text-gray-500 ml-2 tracking-widest">NOME COMPLETO</label><input className="w-full bg-[#0b0f1a] border border-gray-800 p-5 rounded-xl text-white outline-none text-xs font-black uppercase shadow-inner" value={editingItem?.nome || ''} onChange={e => setEditingItem({...editingItem, nome: e.target.value.toUpperCase()})} /></div><div className="grid grid-cols-2 gap-4"><div className="space-y-1"><label className="text-[9px] font-black uppercase text-gray-500 ml-2 tracking-widest">LOGIN</label><input className="w-full bg-[#0b0f1a] border border-gray-800 p-5 rounded-xl text-white outline-none text-xs font-bold shadow-inner" value={editingItem?.login || ''} onChange={e => setEditingItem({...editingItem, login: e.target.value.toLowerCase()})} /></div><div className="space-y-1"><label className="text-[9px] font-black uppercase text-gray-500 ml-2 tracking-widest">SENHA</label><input type="password" className="w-full bg-[#0b0f1a] border border-gray-800 p-5 rounded-xl text-white outline-none text-xs shadow-inner" value={editingItem?.senha || ''} onChange={e => setEditingItem({...editingItem, senha: e.target.value})} /></div></div><div className="grid grid-cols-2 gap-4"><div className="space-y-1"><label className="text-[9px] font-black uppercase text-gray-500 ml-2 tracking-widest">SETOR</label><select className="w-full bg-[#0b0f1a] border border-gray-800 p-5 rounded-xl text-white outline-none text-xs font-black uppercase shadow-inner" value={editingItem?.setor || 'VENDEDOR'} onChange={e => setEditingItem({...editingItem, setor: e.target.value as any})}><option value="VENDEDOR">VENDEDOR</option><option value="RH">RH</option><option value="ADMIN">ADMIN</option></select></div><div className="space-y-1"><label className="text-[9px] font-black uppercase text-gray-500 ml-2 tracking-widest">COMISSÃO (%)</label><input type="number" className="w-full bg-[#0b0f1a] border border-gray-800 p-5 rounded-xl text-white outline-none text-xs font-black shadow-inner" value={editingItem?.comissao || 0} onChange={e => setEditingItem({...editingItem, comissao: Number(e.target.value)})} /></div></div></div>
-            )}
-            {modalType === 'meta' && (
-              <div className="space-y-6"><div className="space-y-1"><label className="text-[9px] font-black uppercase text-gray-500 ml-2 tracking-widest">VENDEDOR</label><select className="w-full bg-[#0b0f1a] border border-gray-800 p-5 rounded-xl text-white outline-none text-xs font-black uppercase shadow-inner" value={editingItem?.vendedor || ''} onChange={e => setEditingItem({...editingItem, vendedor: e.target.value})}><option value="">SELECIONE</option><option value="EMPRESA_VM_SEGUROS">EMPRESA (GLOBAL)</option>{usuarios.filter(u => u.setor === 'VENDEDOR').map(u => <option key={u.id} value={u.nome}>{u.nome.toUpperCase()}</option>)}</select></div><div className="grid grid-cols-3 gap-4"><div className="space-y-1"><label className="text-[9px] font-black uppercase text-gray-500 ml-2 tracking-widest">QTD</label><input type="number" className="w-full bg-[#0b0f1a] border border-gray-800 p-5 rounded-xl text-white outline-none text-xs font-black shadow-inner" value={editingItem?.meta_qtd || 0} onChange={e => setEditingItem({...editingItem, meta_qtd: Number(e.target.value)})} /></div><div className="space-y-1"><label className="text-[9px] font-black uppercase text-gray-500 ml-2 tracking-widest">PRÊMIO</label><input type="number" className="w-full bg-[#0b0f1a] border border-gray-800 p-5 rounded-xl text-white outline-none text-xs font-black shadow-inner" value={editingItem?.meta_premio || 0} onChange={e => setEditingItem({...editingItem, meta_premio: Number(e.target.value)})} /></div><div className="space-y-1"><label className="text-[9px] font-black uppercase text-gray-500 ml-2 tracking-widest">SALÁRIO</label><input type="number" className="w-full bg-[#0b0f1a] border border-gray-800 p-5 rounded-xl text-white outline-none text-xs font-black shadow-inner text-green-500" value={editingItem?.meta_salario || 0} onChange={e => setEditingItem({...editingItem, meta_salario: Number(e.target.value)})} /></div></div></div>
             )}
           </div>
         </ModalWrapper>
