@@ -1,0 +1,7 @@
+{
+  "name": "VM Seguros - Cloud CRM Elite",
+  "description": "Enterprise-grade Insurance CRM with Gemini 3 AI Integration for advanced sales intelligence.",
+  "requestFramePermissions": [
+    "microphone"
+  ]
+}

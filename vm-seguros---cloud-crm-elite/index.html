@@ -1,0 +1,142 @@
+
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>VM SEGUROS - CLOUD</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=JetBrains+Mono:wght@700&display=swap');
+        
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #0b0f1a;
+            color: #f3f4f6;
+            margin: 0;
+            padding: 0;
+        }
+        
+        .font-mono {
+            font-family: 'JetBrains Mono', monospace;
+        }
+
+        .scrollbar-thin::-webkit-scrollbar { width: 6px; height: 6px; }
+        .scrollbar-thin::-webkit-scrollbar-track { background: #0f172a; }
+        .scrollbar-thin::-webkit-scrollbar-thumb { background: #334155; border-radius: 10px; }
+
+        @keyframes piscaSuave {
+            0% { opacity: 1; color: #10b981; }
+            50% { opacity: 0.2; color: #064e3b; }
+            100% { opacity: 1; color: #10b981; }
+        }
+        .s-suhai-pulse { 
+            animation: piscaSuave 2.5s infinite; 
+            font-weight: 900; 
+        }
+
+        .kanban-column {
+            min-width: 280px;
+            flex-shrink: 0;
+        }
+
+        /* Estilos para PDF / Impressão - CORREÇÃO PARA MÚLTIPLAS PÁGINAS */
+        @media print {
+            /* 1. Ocultar tudo que não é essencial para o relatório */
+            aside, header, button, .no-print, input, select, .fas, .fa-robot, .scrollbar-thin::-webkit-scrollbar {
+                display: none !important;
+            }
+
+            /* 2. Forçar todos os containers a expandirem verticalmente e ocuparem o fluxo normal */
+            html, body, #root, div[class*="flex-col"], main, div[class*="flex-1"] {
+                height: auto !important;
+                min-height: auto !important;
+                overflow: visible !important;
+                display: block !important;
+                float: none !important;
+                position: static !important;
+                background-color: white !important;
+                color: black !important;
+                margin: 0 !important;
+                padding: 0 !important;
+            }
+
+            /* 3. Remover restrições do Tailwind/Layout que limitam o documento à altura da janela */
+            .h-screen, .max-h-screen, .overflow-hidden, .overflow-y-auto {
+                height: auto !important;
+                max-height: none !important;
+                overflow: visible !important;
+            }
+
+            /* 4. Estilizar especificamente o container da tabela do financeiro */
+            #financeiro-table {
+                overflow: visible !important;
+                height: auto !important;
+                border: none !important;
+                box-shadow: none !important;
+                background: white !important;
+                max-width: 100% !important;
+            }
+
+            /* 5. Configuração da Tabela para Impressão limpa entre páginas */
+            table {
+                width: 100% !important;
+                border-collapse: collapse !important;
+                table-layout: auto !important;
+                page-break-inside: auto !important;
+            }
+            tr {
+                page-break-inside: avoid !important;
+                page-break-after: auto !important;
+            }
+            thead {
+                display: table-header-group !important;
+            }
+            th, td {
+                border: 1px solid #ddd !important;
+                padding: 10px 8px !important;
+                color: black !important;
+                font-size: 10pt !important;
+                background-color: transparent !important;
+            }
+
+            /* 6. Ajustes de Cores para clareza no papel */
+            .text-white, .text-gray-400, .text-gray-500, .text-blue-400 {
+                color: black !important;
+            }
+            .text-green-500 {
+                color: #059669 !important;
+            }
+            .bg-[#111827], .bg-[#0b0f1a], .bg-[#0b0f1a]/50, .bg-[#0b0f1a]/30 {
+                background-color: transparent !important;
+                border: none !important;
+            }
+            
+            /* Título do Relatório no PDF */
+            #financeiro-table::before {
+                content: "RELATÓRIO DE PRODUÇÃO COMPLETO - VM SEGUROS";
+                display: block;
+                font-weight: 900;
+                font-size: 16pt;
+                text-align: center;
+                margin: 20px 0;
+                text-transform: uppercase;
+                border-bottom: 2px solid black;
+                padding-bottom: 10px;
+            }
+            
+            /* Margens e tamanho da página */
+            @page {
+                size: A4 portrait;
+                margin: 15mm;
+            }
+        }
+    </style>
+    <!-- <link rel="stylesheet" href="/index.css"> -->
+</head>
+<body class="scrollbar-thin">
+    <div id="root"></div>
+    <script type="module" src="./index.tsx"></script>
+</body>
+</html>
