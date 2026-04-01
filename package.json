@@ -6,19 +6,24 @@
   "scripts": {
     "dev": "vite",
     "build": "vite build",
-    "preview": "vite preview",
-    "lint": "tsc --noEmit"
+    "lint": "tsc --noEmit",
+    "preview": "vite preview"
   },
   "dependencies": {
     "@google/genai": "1.37.0",
-    "firebase": "^12.10.0",
+    "firebase": "^12.11.0",
     "react": "^19.2.3",
-    "react-dom": "^19.2.3"
+    "react-dom": "^19.2.3",
+    "motion": "^12.4.7",
+    "clsx": "^2.1.1",
+    "tailwind-merge": "^3.0.1"
   },
   "devDependencies": {
     "@types/node": "^22.14.0",
     "@vitejs/plugin-react": "^5.0.0",
     "typescript": "~5.8.2",
-    "vite": "^6.2.0"
+    "vite": "^6.2.0",
+    "tailwindcss": "^4.0.0",
+    "@tailwindcss/vite": "^4.0.0"
   }
 }
